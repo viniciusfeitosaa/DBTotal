@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Monitoramento - Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-wrapper">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <img src="Copilot_20251215_011245.png" alt="Painel de Monitoramento" class="logo-image">
+                    </div>
+                    <div class="logo-text">
+                        <span class="logo-title">Painel de Monitoramento</span>
+                        <span class="logo-subtitle">Dashboard</span>
+                    </div>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-label">Sistemas</div>
+                    <div class="nav-items">
+                        <a href="#viva-saude" class="nav-item active" data-system="viva-saude">
+                            <span class="nav-icon">🏥</span>
+                            <span class="nav-text">Viva Saúde</span>
+                        </a>
+                        <a href="#coop-vitta" class="nav-item" data-system="coop-vitta">
+                            <span class="nav-icon">💼</span>
+                            <span class="nav-text">Coop Vitta</span>
+                        </a>
+                        <a href="#delta" class="nav-item" data-system="delta">
+                            <span class="nav-icon">🔷</span>
+                            <span class="nav-text">Delta</span>
+                        </a>
+                    </div>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <header class="top-bar">
+                <div class="top-bar-left">
+                    <h1 class="page-title">Painel de Monitoramento</h1>
+                    <p class="page-subtitle">Acompanhamento em tempo real dos sistemas</p>
+                </div>
+            </header>
+
+            <!-- Dashboard Cards -->
+            <div class="dashboard-container">
+                <!-- Card Viva Saúde -->
+                <div class="system-card" id="viva-saude-card">
+                    <div class="card-glow"></div>
+                    <div class="card-header-modern">
+                        <div class="card-icon-wrapper">
+                            <div class="card-icon">🏥</div>
+                        </div>
+                        <div class="card-title-section">
+                            <h2 class="card-title-modern">Viva Saúde</h2>
+                            <p class="card-subtitle">DoctorID Platform</p>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="status-badge" id="viva-saude-status-badge">
+                            <span class="status-indicator-modern" id="viva-saude-status"></span>
+                            <span class="status-text-modern" id="viva-saude-status-text">Aguardando...</span>
+                        </div>
+
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-label">Sistema</div>
+                                <div class="stat-value">DoctorID</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Última Verificação</div>
+                                <div class="stat-value" id="viva-saude-last-update">-</div>
+                            </div>
+                            <div class="stat-item highlight">
+                                <div class="stat-label">Status Login</div>
+                                <div class="stat-value" id="viva-saude-login-status">Não verificado</div>
+                            </div>
+                            <div class="stat-item featured" id="viva-saude-registros-item" style="display: none;">
+                                <div class="stat-label">Registros</div>
+                                <div class="stat-value-large" id="viva-saude-registros">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card Coop Vitta -->
+                <div class="system-card" id="coop-vitta-card">
+                    <div class="card-glow"></div>
+                    <div class="card-header-modern">
+                        <div class="card-icon-wrapper">
+                            <div class="card-icon">💼</div>
+                        </div>
+                        <div class="card-title-section">
+                            <h2 class="card-title-modern">Coop Vitta</h2>
+                            <p class="card-subtitle">RHID Platform</p>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="status-badge" id="coop-vitta-status-badge">
+                            <span class="status-indicator-modern" id="coop-vitta-status"></span>
+                            <span class="status-text-modern" id="coop-vitta-status-text">Aguardando...</span>
+                        </div>
+
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-label">Sistema</div>
+                                <div class="stat-value">RHID</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Última Verificação</div>
+                                <div class="stat-value" id="coop-vitta-last-update">-</div>
+                            </div>
+                            <div class="stat-item highlight">
+                                <div class="stat-label">Status Login</div>
+                                <div class="stat-value" id="coop-vitta-login-status">Não verificado</div>
+                            </div>
+                            <div class="stat-item featured" id="coop-vitta-registros-item" style="display: none;">
+                                <div class="stat-label">Registros</div>
+                                <div class="stat-value-large" id="coop-vitta-registros">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card Delta -->
+                <div class="system-card" id="delta-card">
+                    <div class="card-glow"></div>
+                    <div class="card-header-modern">
+                        <div class="card-icon-wrapper">
+                            <div class="card-icon">🔷</div>
+                        </div>
+                        <div class="card-title-section">
+                            <h2 class="card-title-modern">Delta</h2>
+                            <p class="card-subtitle">RHID Platform</p>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="status-badge" id="delta-status-badge">
+                            <span class="status-indicator-modern" id="delta-status"></span>
+                            <span class="status-text-modern" id="delta-status-text">Aguardando...</span>
+                        </div>
+
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-label">Sistema</div>
+                                <div class="stat-value">RHID</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Última Verificação</div>
+                                <div class="stat-value" id="delta-last-update">-</div>
+                            </div>
+                            <div class="stat-item highlight">
+                                <div class="stat-label">Status Login</div>
+                                <div class="stat-value" id="delta-login-status">Não verificado</div>
+                            </div>
+                            <div class="stat-item featured" id="delta-registros-item" style="display: none;">
+                                <div class="stat-label">Registros</div>
+                                <div class="stat-value-large" id="delta-registros">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
