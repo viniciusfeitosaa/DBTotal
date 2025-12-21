@@ -62,27 +62,14 @@ function initializeEventListeners() {
 
 // Verificar todos os logins
 async function checkAllLogins() {
-    addLog('Iniciando verificação de todos os logins...', 'info');
+    addLog('Iniciando verificação de todos os sistemas...', 'info');
     
-    // Executar sequencialmente para evitar conflitos
-    // Priorizar DoctorID primeiro
-    const systemKeys = Object.keys(systems);
+    // Verificar todos os sistemas
+    await checkLogin('viva-saude');
+    await checkLogin('coop-vitta');
+    await checkLogin('delta');
     
-    // Ordenar: DoctorID primeiro, depois os outros
-    systemKeys.sort((a, b) => {
-        if (a === 'viva-saude') return -1; // DoctorID primeiro
-        if (b === 'viva-saude') return 1;
-        return 0;
-    });
-    
-    // Executar um por vez (sequencial)
-    for (const systemKey of systemKeys) {
-        await checkLogin(systemKey);
-        // Pequeno delay entre execuções para evitar conflitos
-        await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-    
-    addLog('Verificação completa de todos os logins', 'success');
+    addLog('Verificação de todos os sistemas concluída', 'success');
 }
 
 // Verificar login de um sistema específico
@@ -112,32 +99,51 @@ async function checkLogin(systemKey) {
             let registrosValue = null;
             
             if (data.data) {
-                // DoctorID retorna registros diretamente
+                // Mensagem simples do DoctorID
+                if (data.data.message) {
+                    infoText += `\n\n📝 ${data.data.message}`;
+                }
+                
+                // Informação sobre Filtro Avançado
+                if (data.data.filtroAvancadoAcessado) {
+                    infoText += `\n\n🔍 Filtro Avançado: ✅ Acessado`;
+                    
+                    // Informação sobre tipo de filtro selecionado
+                    if (data.data.tipoFiltroSelecionado) {
+                        infoText += `\n  • Tipo de Filtro: "${data.data.tipoFiltroSelecionado.texto}"`;
+                        infoText += `\n  • Valor: ${data.data.tipoFiltroSelecionado.valor}`;
+                    }
+                    
+                    // Informação sobre operador selecionado
+                    if (data.data.operadorSelecionado) {
+                        infoText += `\n  • Operador: "${data.data.operadorSelecionado.texto}"`;
+                        infoText += `\n  • Valor: ${data.data.operadorSelecionado.valor}`;
+                    }
+                    
+                    // Informação sobre valor inserido
+                    if (data.data.valorInput) {
+                        infoText += `\n  • Valor inserido: "${data.data.valorInput.valor}"`;
+                    }
+                    
+                    // Informação sobre filtro aplicado
+                    if (data.data.filtroAplicado !== undefined) {
+                        infoText += `\n  • Filtro aplicado: ${data.data.filtroAplicado ? '✅ Sim' : '❌ Não'}`;
+                    }
+                    
+                    // Mensagem do alerta
+                    if (data.data.mensagemAlerta) {
+                        infoText += `\n  • Mensagem: ${data.data.mensagemAlerta}`;
+                    }
+                }
+                
+                // Compatibilidade com outros sistemas (registros)
                 if (data.data.registros !== undefined) {
                     registrosValue = data.data.registros;
                     infoText += `\n\n📊 Registros encontrados: ${data.data.registros}`;
-                    if (data.data.message) {
-                        infoText += `\n📝 Mensagem: ${data.data.message}`;
-                    }
-                    if (data.data.source) {
-                        infoText += `\n📍 Fonte: ${data.data.source}`;
-                    }
-                    if (data.data.selector) {
-                        infoText += `\n🔍 Seletor CSS: ${data.data.selector}`;
-                    }
-                    if (data.data.elementInfo) {
-                        infoText += `\n\n📋 Detalhes do elemento:`;
-                        infoText += `\n  • Classe: ${data.data.elementInfo.className}`;
-                        if (data.data.elementInfo.id !== 'sem id') {
-                            infoText += `\n  • ID: ${data.data.elementInfo.id}`;
-                        }
-                        if (data.data.elementInfo.dataAttributes) {
-                            infoText += `\n  • Atributos data: ${data.data.elementInfo.dataAttributes}`;
-                        }
-                    }
                 }
+                
                 // Coop Vitta e Delta retornam total do CSV
-                else if (data.data.total !== undefined) {
+                if (data.data.total !== undefined) {
                     registrosValue = data.data.total;
                     infoText += `\n\n📊 Total de registros: ${data.data.total}`;
                     if (data.data.ativos !== undefined) {
@@ -157,7 +163,7 @@ async function checkLogin(systemKey) {
                 registros: registrosValue
             });
             
-            // Criar mensagem de log com registros
+            // Criar mensagem de log
             let logMessage = `${system.name}: Login bem-sucedido`;
             if (data.data?.registros !== undefined) {
                 logMessage += ` - ${data.data.registros} registros`;
@@ -214,13 +220,18 @@ function updateSiteData(siteKey, data) {
         loginStatusEl.style.fontWeight = '600';
     }
     
-    // Mostrar registros se disponível (DoctorID)
+    // Mostrar registros/opções se disponível
     if (data.registros !== null && data.registros !== undefined) {
         if (registrosEl) {
             registrosEl.textContent = data.registros;
         }
         if (registrosItemEl) {
             registrosItemEl.style.display = 'flex';
+            // Atualizar label se for DoctorID
+            const labelEl = registrosItemEl.querySelector('.stat-label');
+            if (labelEl && siteKey === 'viva-saude') {
+                labelEl.textContent = 'Registros Encontrados';
+            }
         }
     } else {
         if (registrosItemEl) {

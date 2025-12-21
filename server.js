@@ -939,18 +939,18 @@ async function loginDoctorID(username, password) {
 
         console.log('[DOCTORID] ✅ Login bem-sucedido!');
         
-        // Navegar para a página de groupCompany/users
-        console.log('[DOCTORID] Navegando para página groupCompany/users...');
+        // Navegar para a página personGroupCompany
+        console.log('[DOCTORID] Navegando para página personGroupCompany...');
         try {
-            await page.goto('https://www.doctorid.com.br/#groupCompany/users', {
+            await page.goto('https://www.doctorid.com.br/#personGroupCompany', {
                 waitUntil: 'networkidle2',
                 timeout: 30000
             });
-            console.log('[DOCTORID] Navegação para /#groupCompany/users concluída');
+            console.log('[DOCTORID] Navegação para /#personGroupCompany concluída');
         } catch (e) {
             console.log('[DOCTORID] Erro ao navegar, tentando via hash...');
             await page.evaluate(() => {
-                window.location.hash = '#groupCompany/users';
+                window.location.hash = '#personGroupCompany';
             });
             await delay(5000);
         }
@@ -963,126 +963,544 @@ async function loginDoctorID(username, password) {
         
         // Aguardar JavaScript/Angular renderizar
         console.log('[DOCTORID] Aguardando JavaScript/Angular renderizar...');
-        await delay(8000);
+        await delay(5000);
         
-        // Procurar e clicar no botão "Filtrar" (id="gerarTela")
-        console.log('[DOCTORID] Procurando botão Filtrar (id="gerarTela")...');
-        try {
-            await page.waitForSelector('#gerarTela', { timeout: 15000 });
-            console.log('[DOCTORID] Botão Filtrar encontrado!');
-            
-            // Clicar no botão
-            await page.click('#gerarTela');
-            console.log('[DOCTORID] Botão Filtrar clicado com sucesso');
-            
-            // Aguardar processamento após clicar
-            console.log('[DOCTORID] Aguardando processamento após clicar no botão...');
-            await delay(5000);
-            
-            // Aguardar elemento #mensagens aparecer
-            console.log('[DOCTORID] Aguardando elemento #mensagens aparecer...');
-            try {
-                await page.waitForSelector('#mensagens', { timeout: 15000 });
-                console.log('[DOCTORID] Elemento #mensagens encontrado');
-            } catch (e) {
-                console.log('[DOCTORID] Aguardando mais tempo para #mensagens aparecer...');
-                await delay(5000);
+        // Procurar e clicar no link "Filtro Avançado"
+        console.log('[DOCTORID] Procurando link "Filtro Avançado"...');
+        const filtroLink = await page.evaluate(() => {
+            // Procurar pelo href exato
+            let link = document.querySelector('a[href="#filtroAvancado"]');
+            if (!link) {
+                // Procurar por texto "Filtro Avançado"
+                const links = Array.from(document.querySelectorAll('a'));
+                link = links.find(a => {
+                    const text = a.textContent || a.innerText;
+                    return text.includes('Filtro Avançado');
+                });
             }
-            
-            // Extrair dados do elemento #mensagens
-            console.log('[DOCTORID] Extraindo dados do elemento #mensagens...');
-            const data = await page.evaluate(() => {
-                const result = {
-                    registros: 0,
-                    message: null,
-                    source: null,
-                    selector: null
-                };
-
-                // Tentar o caminho específico primeiro
-                const specificElement = document.querySelector('#mensagens > div:nth-child(6) > div');
-                if (specificElement) {
-                    const text = specificElement.textContent || specificElement.innerText;
-                    const match = text.match(/(\d+)\s*registro/i);
-                    if (match) {
-                        result.registros = parseInt(match[1]);
-                        result.message = text.trim();
-                        result.source = 'Element #mensagens > div:nth-child(6) > div';
-                        result.selector = '#mensagens > div:nth-child(6) > div';
-                        return result;
-                    }
-                }
-
-                // Se não encontrou, procurar em #mensagens
-                const mensagensElement = document.querySelector('#mensagens');
-                if (mensagensElement) {
-                    const text = mensagensElement.textContent || mensagensElement.innerText;
-                    const match = text.match(/(\d+)\s*registro/i);
-                    if (match) {
-                        result.registros = parseInt(match[1]);
-                        result.message = text.trim();
-                        result.source = 'Element #mensagens';
-                        result.selector = '#mensagens';
-                        return result;
-                    }
-                }
-
-                // Última tentativa: procurar qualquer alert na página
-                const alerts = Array.from(document.querySelectorAll('.alert'));
-                for (const alert of alerts) {
-                    const text = alert.textContent || alert.innerText;
-                    const match = text.match(/(\d+)\s*registro/i);
-                    if (match) {
-                        result.registros = parseInt(match[1]);
-                        result.message = text.trim();
-                        result.source = 'Alert element';
-                        result.selector = '.alert';
-                        return result;
-                    }
-                }
-
-                return result;
-            });
-
-            console.log(`[DOCTORID] Dados extraídos: ${data.registros} registros encontrados`);
-            if (data.registros > 0) {
-                console.log(`[DOCTORID] Fonte: ${data.source} | Seletor: ${data.selector}`);
+            if (link) {
+                link.click();
+                return true;
             }
+            return false;
+        });
 
-            const cookies = await page.cookies();
-            await browser.close();
-            
-            console.log('[DOCTORID] ✅ Processo completo finalizado!');
-
-            return { 
-                success: true, 
-                cookies,
-                data: {
-                    registros: data.registros || 0,
-                    message: data.message || 'Nenhum registro encontrado',
-                    source: data.source || 'Não encontrado',
-                    selector: data.selector || 'N/A'
-                }
-            };
-            
-        } catch (e) {
-            console.log(`[DOCTORID] Erro ao encontrar/clicar no botão: ${e.message}`);
-            const cookies = await page.cookies();
-            await browser.close();
-            return { 
-                success: true, 
-                cookies,
-                data: {
-                    registros: 0,
-                    message: `Erro ao extrair dados: ${e.message}`,
-                    source: 'Erro',
-                    selector: 'N/A'
-                }
-            };
+        if (!filtroLink) {
+            throw new Error('Link "Filtro Avançado" não encontrado');
         }
+
+        console.log('[DOCTORID] ✅ Link "Filtro Avançado" clicado com sucesso');
+        await delay(3000);
+        
+        // Aguardar elemento filtroComplexo_selecionar aparecer
+        console.log('[DOCTORID] Aguardando elemento filtroComplexo_selecionar aparecer...');
+        await page.waitForSelector('.filtroComplexo_selecionar', { timeout: 15000, visible: true });
+        console.log('[DOCTORID] ✅ Elemento filtroComplexo_selecionar encontrado');
+        await delay(2000);
+        
+        // Identificar o select dentro do filtroComplexo_selecionar
+        console.log('[DOCTORID] Identificando select de tipo de filtro...');
+        const selectInfo = await page.evaluate(() => {
+            // Procurar pelo elemento filtroComplexo_selecionar
+            const filtroContainer = document.querySelector('.filtroComplexo_selecionar');
+            if (!filtroContainer) {
+                return { encontrado: false, motivo: 'Container filtroComplexo_selecionar não encontrado' };
+            }
+            
+            // Procurar o select dentro do container
+            const select = filtroContainer.querySelector('select[name="criterios[][tipoFiltroComplexo]"]');
+            if (!select) {
+                return { encontrado: false, motivo: 'Select não encontrado dentro do container' };
+            }
+            
+            // Verificar se existe a opção "Percentual do perfil"
+            const options = Array.from(select.options);
+            const percentualOption = options.find(opt => 
+                opt.value === 'PercentualDoPerfil' || 
+                opt.text.trim() === 'Percentual do perfil'
+            );
+            
+            return {
+                encontrado: true,
+                selectId: select.id || null,
+                selectName: select.name,
+                selectClasses: select.className,
+                totalOpcoes: options.length,
+                percentualEncontrado: !!percentualOption,
+                percentualValue: percentualOption ? percentualOption.value : null,
+                percentualText: percentualOption ? percentualOption.text.trim() : null,
+                valorAtual: select.value,
+                textoAtual: select.options[select.selectedIndex]?.textContent?.trim() || null
+            };
+        });
+        
+        console.log('[DOCTORID] 📋 Informações do select:');
+        console.log(`  - Container encontrado: ${selectInfo.encontrado}`);
+        if (!selectInfo.encontrado) {
+            console.log(`  - Motivo: ${selectInfo.motivo}`);
+            throw new Error(`Select não encontrado: ${selectInfo.motivo}`);
+        }
+        console.log(`  - Total de opções: ${selectInfo.totalOpcoes}`);
+        console.log(`  - Opção "Percentual do perfil" encontrada: ${selectInfo.percentualEncontrado}`);
+        console.log(`  - Valor atual: "${selectInfo.valorAtual}"`);
+        console.log(`  - Texto atual: "${selectInfo.textoAtual}"`);
+        
+        if (!selectInfo.percentualEncontrado) {
+            throw new Error('Opção "Percentual do perfil" não encontrada no select');
+        }
+        
+        // Selecionar "Percentual do perfil"
+        console.log('[DOCTORID] Selecionando "Percentual do perfil"...');
+        const selecaoResultado = await page.evaluate(() => {
+            const select = document.querySelector('.filtroComplexo_selecionar select[name="criterios[][tipoFiltroComplexo]"]');
+            if (!select) {
+                return { sucesso: false, erro: 'Select não encontrado' };
+            }
+            
+            // Procurar a opção "Percentual do perfil"
+            const options = Array.from(select.options);
+            const percentualOption = options.find(opt => 
+                opt.value === 'PercentualDoPerfil' || 
+                opt.text.trim() === 'Percentual do perfil'
+            );
+            
+            if (!percentualOption) {
+                return { sucesso: false, erro: 'Opção não encontrada' };
+            }
+            
+            // Definir o valor
+            select.value = percentualOption.value;
+            
+            // Disparar eventos nativos
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            select.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            // Tentar atualizar via jQuery/Select2 se disponível
+            if (window.jQuery && window.jQuery(select).data('select2')) {
+                try {
+                    window.jQuery(select).val(percentualOption.value).trigger('change');
+                } catch (e) {
+                    console.log(`[DOCTORID-BROWSER] Erro ao atualizar via jQuery: ${e.message}`);
+                }
+            }
+            
+            // Verificar se foi selecionado
+            const valorSelecionado = select.value;
+            const textoSelecionado = select.options[select.selectedIndex]?.textContent?.trim() || '';
+            
+            return {
+                sucesso: true,
+                valor: valorSelecionado,
+                texto: textoSelecionado,
+                esperado: percentualOption.value === 'PercentualDoPerfil'
+            };
+        });
+        
+        if (!selecaoResultado.sucesso) {
+            throw new Error(`Erro ao selecionar: ${selecaoResultado.erro}`);
+        }
+        
+        console.log(`[DOCTORID] ✅ "Percentual do perfil" selecionado: "${selecaoResultado.texto}" (valor: ${selecaoResultado.valor})`);
+        await delay(2000);
+        
+        // Verificar se o Select2 visual foi atualizado
+        const select2Atualizado = await page.evaluate(() => {
+            const select = document.querySelector('.filtroComplexo_selecionar select[name="criterios[][tipoFiltroComplexo]"]');
+            if (!select) return { atualizado: false };
+            
+            const select2Container = select.nextElementSibling;
+            if (select2Container) {
+                const rendered = select2Container.querySelector('.select2-selection__rendered');
+                if (rendered) {
+                    return {
+                        atualizado: true,
+                        textoVisual: rendered.textContent.trim()
+                    };
+                }
+            }
+            return { atualizado: false };
+        });
+        
+        if (select2Atualizado.atualizado) {
+            console.log(`[DOCTORID] ✅ Select2 visual atualizado: "${select2Atualizado.textoVisual}"`);
+        } else {
+            console.log('[DOCTORID] ⚠️ Select2 visual não foi atualizado automaticamente');
+        }
+        
+        // Aguardar o select de operadores aparecer após selecionar o tipo de filtro
+        console.log('[DOCTORID] Aguardando select de operadores aparecer...');
+        await delay(2000);
+        
+        // Identificar o select de operadores
+        console.log('[DOCTORID] Identificando select de operadores...');
+        const operadorInfo = await page.evaluate(() => {
+            // Procurar o select de operadores dentro do filtroComplexo_selecionar
+            const selects = document.querySelectorAll('.filtroComplexo_selecionar select[name="criterios[][parametros[]]"]');
+            
+            // Procurar o select que tem a opção "MaiorOuIgual"
+            for (const select of selects) {
+                const options = Array.from(select.options);
+                const hasMaiorOuIgual = options.some(opt => 
+                    opt.value === 'MaiorOuIgual' || 
+                    opt.text.toLowerCase().includes('maior ou igual')
+                );
+                
+                if (hasMaiorOuIgual) {
+                    return {
+                        encontrado: true,
+                        selectClasses: select.className,
+                        totalOpcoes: options.length,
+                        maiorOuIgualEncontrado: true,
+                        valorAtual: select.value,
+                        textoAtual: select.options[select.selectedIndex]?.textContent?.trim() || null,
+                        opcoes: options.map(opt => ({
+                            value: opt.value,
+                            text: opt.text.trim()
+                        }))
+                    };
+                }
+            }
+            
+            return { encontrado: false, motivo: 'Select de operadores não encontrado' };
+        });
+        
+        console.log('[DOCTORID] 📋 Informações do select de operadores:');
+        console.log(`  - Select encontrado: ${operadorInfo.encontrado}`);
+        if (!operadorInfo.encontrado) {
+            console.log(`  - Motivo: ${operadorInfo.motivo}`);
+            throw new Error(`Select de operadores não encontrado: ${operadorInfo.motivo}`);
+        }
+        console.log(`  - Total de opções: ${operadorInfo.totalOpcoes}`);
+        console.log(`  - Opção "Maior ou igual" encontrada: ${operadorInfo.maiorOuIgualEncontrado}`);
+        console.log(`  - Valor atual: "${operadorInfo.valorAtual}"`);
+        console.log(`  - Texto atual: "${operadorInfo.textoAtual}"`);
+        
+        // Selecionar "Maior ou igual"
+        console.log('[DOCTORID] Selecionando "Maior ou igual"...');
+        const operadorSelecionado = await page.evaluate(() => {
+            const selects = document.querySelectorAll('.filtroComplexo_selecionar select[name="criterios[][parametros[]]"]');
+            
+            for (const select of selects) {
+                const options = Array.from(select.options);
+                const maiorOuIgualOption = options.find(opt => 
+                    opt.value === 'MaiorOuIgual' || 
+                    opt.text.toLowerCase().includes('maior ou igual')
+                );
+                
+                if (maiorOuIgualOption) {
+                    // Definir o valor
+                    select.value = maiorOuIgualOption.value;
+                    
+                    // Disparar eventos nativos
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    select.dispatchEvent(new Event('input', { bubbles: true }));
+                    
+                    // Tentar atualizar via jQuery/Select2 se disponível
+                    if (window.jQuery && window.jQuery(select).data('select2')) {
+                        try {
+                            window.jQuery(select).val(maiorOuIgualOption.value).trigger('change');
+                        } catch (e) {
+                            console.log(`[DOCTORID-BROWSER] Erro ao atualizar via jQuery: ${e.message}`);
+                        }
+                    }
+                    
+                    // Verificar se foi selecionado
+                    const valorSelecionado = select.value;
+                    const textoSelecionado = select.options[select.selectedIndex]?.textContent?.trim() || '';
+                    
+                    return {
+                        sucesso: true,
+                        valor: valorSelecionado,
+                        texto: textoSelecionado,
+                        esperado: maiorOuIgualOption.value === 'MaiorOuIgual'
+                    };
+                }
+            }
+            
+            return { sucesso: false, erro: 'Opção "Maior ou igual" não encontrada' };
+        });
+        
+        if (!operadorSelecionado.sucesso) {
+            throw new Error(`Erro ao selecionar operador: ${operadorSelecionado.erro}`);
+        }
+        
+        console.log(`[DOCTORID] ✅ "Maior ou igual" selecionado: "${operadorSelecionado.texto}" (valor: ${operadorSelecionado.valor})`);
+        await delay(2000);
+        
+        // Verificar se o Select2 visual do operador foi atualizado
+        const operadorSelect2Atualizado = await page.evaluate(() => {
+            const selects = document.querySelectorAll('.filtroComplexo_selecionar select[name="criterios[][parametros[]]"]');
+            
+            for (const select of selects) {
+                const options = Array.from(select.options);
+                if (options.some(opt => opt.value === 'MaiorOuIgual')) {
+                    const select2Container = select.nextElementSibling;
+                    if (select2Container) {
+                        const rendered = select2Container.querySelector('.select2-selection__rendered');
+                        if (rendered) {
+                            return {
+                                atualizado: true,
+                                textoVisual: rendered.textContent.trim()
+                            };
+                        }
+                    }
+                }
+            }
+            return { atualizado: false };
+        });
+        
+        if (operadorSelect2Atualizado.atualizado) {
+            console.log(`[DOCTORID] ✅ Select2 visual do operador atualizado: "${operadorSelect2Atualizado.textoVisual}"`);
+        } else {
+            console.log('[DOCTORID] ⚠️ Select2 visual do operador não foi atualizado automaticamente');
+        }
+        
+        // Aguardar o campo de input aparecer após selecionar o operador
+        console.log('[DOCTORID] Aguardando campo de input aparecer...');
+        await delay(2000);
+        
+        // Identificar o campo de input
+        console.log('[DOCTORID] Identificando campo de input de valor...');
+        const inputInfo = await page.evaluate(() => {
+            // Procurar o input dentro do filtroComplexo_selecionar
+            const inputs = document.querySelectorAll('.filtroComplexo_selecionar input[name="criterios[][parametros[]]"][type="text"]');
+            
+            for (const input of inputs) {
+                // Verificar se tem os atributos corretos
+                if (input.hasAttribute('pattern') && 
+                    input.getAttribute('max') === '100' &&
+                    input.getAttribute('maxlength') === '5') {
+                    return {
+                        encontrado: true,
+                        name: input.name,
+                        type: input.type,
+                        pattern: input.getAttribute('pattern'),
+                        max: input.getAttribute('max'),
+                        maxlength: input.getAttribute('maxlength'),
+                        title: input.getAttribute('title'),
+                        valorAtual: input.value,
+                        classes: input.className
+                    };
+                }
+            }
+            
+            return { encontrado: false, motivo: 'Input não encontrado com os atributos esperados' };
+        });
+        
+        console.log('[DOCTORID] 📋 Informações do input:');
+        console.log(`  - Input encontrado: ${inputInfo.encontrado}`);
+        if (!inputInfo.encontrado) {
+            console.log(`  - Motivo: ${inputInfo.motivo}`);
+            throw new Error(`Input não encontrado: ${inputInfo.motivo}`);
+        }
+        console.log(`  - Pattern: "${inputInfo.pattern}"`);
+        console.log(`  - Max: "${inputInfo.max}"`);
+        console.log(`  - Valor atual: "${inputInfo.valorAtual}"`);
+        
+        // Preencher o campo com "40"
+        console.log('[DOCTORID] Preenchendo campo de input com "40"...');
+        const inputPreenchido = await page.evaluate(() => {
+            const inputs = document.querySelectorAll('.filtroComplexo_selecionar input[name="criterios[][parametros[]]"][type="text"]');
+            
+            for (const input of inputs) {
+                if (input.hasAttribute('pattern') && 
+                    input.getAttribute('max') === '100' &&
+                    input.getAttribute('maxlength') === '5') {
+                    // Limpar o campo
+                    input.value = '';
+                    
+                    // Preencher com "40"
+                    input.value = '40';
+                    
+                    // Disparar eventos nativos
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    input.dispatchEvent(new Event('blur', { bubbles: true }));
+                    
+                    // Focar no campo
+                    input.focus();
+                    
+                    return {
+                        sucesso: true,
+                        valor: input.value
+                    };
+                }
+            }
+            
+            return { sucesso: false, erro: 'Input não encontrado' };
+        });
+        
+        if (!inputPreenchido.sucesso) {
+            throw new Error(`Erro ao preencher input: ${inputPreenchido.erro}`);
+        }
+        
+        console.log(`[DOCTORID] ✅ Campo preenchido com: "${inputPreenchido.valor}"`);
+        await delay(500);
+        
+        // Pressionar Enter no campo de input
+        console.log('[DOCTORID] Pressionando Enter no campo de input...');
+        await page.keyboard.press('Enter');
+        console.log('[DOCTORID] ✅ Enter pressionado');
+        await delay(2000);
+        
+        // Verificar se o valor foi mantido após pressionar Enter
+        const valorVerificado = await page.evaluate(() => {
+            const inputs = document.querySelectorAll('.filtroComplexo_selecionar input[name="criterios[][parametros[]]"][type="text"]');
+            
+            for (const input of inputs) {
+                if (input.hasAttribute('pattern') && 
+                    input.getAttribute('max') === '100' &&
+                    input.getAttribute('maxlength') === '5') {
+                    return {
+                        valor: input.value,
+                        correto: input.value === '40'
+                    };
+                }
+            }
+            return { valor: null, correto: false };
+        });
+        
+        if (valorVerificado.correto) {
+            console.log(`[DOCTORID] ✅ Valor verificado e correto: "${valorVerificado.valor}"`);
+        } else {
+            console.log(`[DOCTORID] ⚠️ Valor após Enter: "${valorVerificado.valor}" (esperado: "40")`);
+        }
+        
+        // Aguardar processamento após pressionar Enter
+        console.log('[DOCTORID] Aguardando processamento após pressionar Enter...');
+        await delay(5000);
+        
+        // Aguardar a página carregar completamente
+        try {
+            await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 });
+            console.log('[DOCTORID] ✅ Página carregada após filtrar');
+        } catch (e) {
+            console.log('[DOCTORID] ⚠️ Timeout aguardando navegação, continuando...');
+            await delay(3000);
+        }
+        
+        // Aguardar o elemento de alerta aparecer
+        console.log('[DOCTORID] Aguardando elemento de alerta aparecer...');
+        let alertaEncontrado = false;
+        let registrosEncontrados = 0;
+        let mensagemAlerta = null;
+        
+        // Tentar aguardar pelo elemento de alerta
+        try {
+            await page.waitForSelector('.alert.alert-dismissible.hidden-print.alert-info[role="alert"]', { 
+                timeout: 15000, 
+                visible: true 
+            });
+            alertaEncontrado = true;
+            console.log('[DOCTORID] ✅ Elemento de alerta encontrado');
+        } catch (e) {
+            console.log('[DOCTORID] ⚠️ Elemento de alerta não apareceu imediatamente, tentando aguardar mais...');
+            await delay(5000);
+        }
+        
+        // Extrair o número de registros do alerta
+        console.log('[DOCTORID] Extraindo número de registros do alerta...');
+        const dadosAlerta = await page.evaluate(() => {
+            const result = {
+                registros: 0,
+                message: null,
+                encontrado: false,
+                elementoHTML: null
+            };
+            
+            // Método 1: Procurar pelo elemento específico com as classes exatas
+            const alertEspecifico = document.querySelector('div.alert.alert-dismissible.hidden-print.alert-info[data-requests-to-live=""][role="alert"]');
+            if (alertEspecifico) {
+                result.encontrado = true;
+                const text = alertEspecifico.textContent || alertEspecifico.innerText || '';
+                result.elementoHTML = alertEspecifico.outerHTML.substring(0, 500);
+                
+                // Procurar padrão: "X registro(s) encontrado(s)."
+                const match = text.match(/(\d+)\s*registro\(s\)\s*encontrado\(s\)/i);
+                if (match) {
+                    result.registros = parseInt(match[1]);
+                    result.message = text.trim();
+                    console.log(`[DOCTORID-BROWSER] ✅ Registros encontrados no alert específico: ${result.registros}`);
+                    return result;
+                }
+            }
+            
+            // Método 2: Procurar por qualquer alert com alert-info que contenha "registro(s) encontrado(s)"
+            const alerts = Array.from(document.querySelectorAll('.alert.alert-info'));
+            for (const alert of alerts) {
+                const text = alert.textContent || alert.innerText || '';
+                const match = text.match(/(\d+)\s*registro\(s\)\s*encontrado\(s\)/i);
+                if (match) {
+                    result.encontrado = true;
+                    result.registros = parseInt(match[1]);
+                    result.message = text.trim();
+                    result.elementoHTML = alert.outerHTML.substring(0, 500);
+                    console.log(`[DOCTORID-BROWSER] ✅ Registros encontrados em alert-info: ${result.registros}`);
+                    return result;
+                }
+            }
+            
+            // Método 3: Procurar em qualquer alert com padrão mais flexível
+            const allAlerts = Array.from(document.querySelectorAll('.alert'));
+            for (const alert of allAlerts) {
+                const text = alert.textContent || alert.innerText || '';
+                const match = text.match(/(\d+)\s*registro/i);
+                if (match) {
+                    result.encontrado = true;
+                    result.registros = parseInt(match[1]);
+                    result.message = text.trim();
+                    result.elementoHTML = alert.outerHTML.substring(0, 500);
+                    console.log(`[DOCTORID-BROWSER] ✅ Registros encontrados em alert genérico: ${result.registros}`);
+                    return result;
+                }
+            }
+            
+            console.log(`[DOCTORID-BROWSER] ❌ Nenhum alert com registros encontrado`);
+            return result;
+        });
+        
+        if (dadosAlerta.encontrado && dadosAlerta.registros > 0) {
+            registrosEncontrados = dadosAlerta.registros;
+            mensagemAlerta = dadosAlerta.message;
+            console.log(`[DOCTORID] ✅ Registros encontrados: ${registrosEncontrados}`);
+            console.log(`[DOCTORID] 📋 Mensagem: "${mensagemAlerta}"`);
+        } else {
+            console.log('[DOCTORID] ⚠️ Não foi possível extrair o número de registros do alerta');
+        }
+        
+        // Finalizar processo
+        const cookies = await page.cookies();
+        await browser.close();
+        
+        console.log('[DOCTORID] ✅ Processo finalizado - Filtro Avançado configurado e registros extraídos');
+        
+        return { 
+            success: true, 
+            cookies,
+            data: {
+                message: 'Login bem-sucedido, Filtro Avançado configurado: "Percentual do perfil", "Maior ou igual" e valor "40"',
+                filtroAvancadoAcessado: true,
+                filtroAplicado: registrosEncontrados > 0,
+                tipoFiltroSelecionado: {
+                    valor: selecaoResultado.valor,
+                    texto: selecaoResultado.texto
+                },
+                operadorSelecionado: {
+                    valor: operadorSelecionado.valor,
+                    texto: operadorSelecionado.texto
+                },
+                valorInput: {
+                    valor: valorVerificado.valor || '40',
+                    inserido: true
+                },
+                registros: registrosEncontrados,
+                mensagemAlerta: mensagemAlerta
+            }
+        };
+        
     } catch (error) {
         if (browser) await browser.close();
-        console.error('Erro no login DoctorID:', error);
+        console.error('[DOCTORID] Erro:', error);
         throw error;
     }
 }
