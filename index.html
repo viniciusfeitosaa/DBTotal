@@ -27,9 +27,18 @@
             
             <nav class="sidebar-nav">
                 <div class="nav-section">
+                    <div class="nav-label">Geral</div>
+                    <div class="nav-items">
+                        <a href="#geral" class="nav-item active" data-system="geral">
+                            <span class="nav-icon">📊</span>
+                            <span class="nav-text">Visão Geral</span>
+                        </a>
+                    </div>
+                </div>
+                <div class="nav-section">
                     <div class="nav-label">Sistemas</div>
                     <div class="nav-items">
-                        <a href="#viva-saude" class="nav-item active" data-system="viva-saude">
+                        <a href="#viva-saude" class="nav-item" data-system="viva-saude">
                             <span class="nav-icon">🏥</span>
                             <span class="nav-text">Viva Saúde</span>
                         </a>
@@ -58,6 +67,54 @@
 
             <!-- Dashboard Cards -->
             <div class="dashboard-container">
+                <!-- Card Geral -->
+                <div class="system-card" id="geral-card">
+                    <div class="card-glow"></div>
+                    <div class="card-header-modern">
+                        <div class="card-icon-wrapper">
+                            <div class="card-icon">📊</div>
+                        </div>
+                        <div class="card-title-section">
+                            <h2 class="card-title-modern">Visão Geral</h2>
+                            <p class="card-subtitle">Status de Todos os Sistemas</p>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="status-badge" id="geral-status-badge">
+                            <span class="status-indicator-modern" id="geral-status"></span>
+                            <span class="status-text-modern" id="geral-status-text">Aguardando...</span>
+                        </div>
+
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-label">Sistemas Operacionais</div>
+                                <div class="stat-value" id="geral-operacionais">-</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Sistemas com Problemas</div>
+                                <div class="stat-value" id="geral-problemas">-</div>
+                            </div>
+                            <div class="stat-item highlight">
+                                <div class="stat-label">Status Geral</div>
+                                <div class="stat-value" id="geral-status-geral">Não verificado</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Última Verificação</div>
+                                <div class="stat-value" id="geral-last-update">-</div>
+                            </div>
+                        </div>
+
+                        <!-- Resumo por Sistema -->
+                        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+                            <div class="stat-label" style="margin-bottom: 15px; font-weight: 600;">Status por Sistema:</div>
+                            <div id="geral-sistemas-resumo" style="display: flex; flex-direction: column; gap: 10px;">
+                                <!-- Será preenchido dinamicamente -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Card Viva Saúde -->
                 <div class="system-card" id="viva-saude-card">
                     <div class="card-glow"></div>

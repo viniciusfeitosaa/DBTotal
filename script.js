@@ -28,6 +28,20 @@ const AUTO_REFRESH_INTERVAL = 24 * 60 * 60 * 1000; // 24 horas
 document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
     checkServerHealth();
+    
+    // Mostrar apenas o card geral por padrão
+    const allCards = document.querySelectorAll('.system-card');
+    allCards.forEach(card => {
+        if (card.id === 'geral-card') {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+    
+    // Inicializar card geral
+    updateGeralCard();
+    
     checkAllLogins();
     // Iniciar auto-refresh automático a cada 24 horas
     startAutoRefresh();
@@ -79,6 +93,14 @@ async function checkLogin(systemKey) {
 
     const startTime = Date.now();
     updateSiteStatus(systemKey, 'checking', 'Verificando login...');
+    
+    // Atualizar status no card geral (verificando)
+    sistemasStatus[systemKey] = {
+        success: null,
+        lastUpdate: null,
+        registros: null
+    };
+    updateGeralCard();
 
     try {
         const response = await fetch(`${API_BASE_URL}${system.apiEndpoint}`, {
@@ -155,13 +177,25 @@ async function checkLogin(systemKey) {
                 }
             }
             
+            const lastUpdateTimestamp = Date.now();
+            const lastUpdate = new Date(lastUpdateTimestamp).toLocaleString('pt-BR');
+            
             updateSiteData(systemKey, {
                 loginStatus: 'Login bem-sucedido',
-                lastUpdate: new Date().toLocaleString('pt-BR'),
+                lastUpdate: lastUpdate,
                 responseTime: `${responseTime}ms`,
                 success: true,
                 registros: registrosValue
             });
+            
+            // Atualizar status no card geral
+            sistemasStatus[systemKey] = {
+                success: true,
+                lastUpdate: lastUpdate,
+                lastUpdateTimestamp: lastUpdateTimestamp,
+                registros: registrosValue
+            };
+            updateGeralCard();
             
             // Criar mensagem de log
             let logMessage = `${system.name}: Login bem-sucedido`;
@@ -173,24 +207,50 @@ async function checkLogin(systemKey) {
             logMessage += ` (${responseTime}ms)`;
             addLog(logMessage, 'success');
         } else {
+            const lastUpdateTimestamp = Date.now();
+            const lastUpdate = new Date(lastUpdateTimestamp).toLocaleString('pt-BR');
+            
             updateSiteStatus(systemKey, 'offline', 'Login falhou');
             updateSiteData(systemKey, {
                 loginStatus: 'Falha no login',
-                lastUpdate: new Date().toLocaleString('pt-BR'),
+                lastUpdate: lastUpdate,
                 responseTime: `${responseTime}ms`,
                 success: false
             });
+            
+            // Atualizar status no card geral
+            sistemasStatus[systemKey] = {
+                success: false,
+                lastUpdate: lastUpdate,
+                lastUpdateTimestamp: lastUpdateTimestamp,
+                registros: null
+            };
+            updateGeralCard();
+            
             addLog(`${system.name}: Falha no login - ${data.message || 'Erro desconhecido'}`, 'error');
         }
     } catch (error) {
         const responseTime = Date.now() - startTime;
+        const lastUpdateTimestamp = Date.now();
+        const lastUpdate = new Date(lastUpdateTimestamp).toLocaleString('pt-BR');
+        
         updateSiteStatus(systemKey, 'offline', 'Erro de conexão');
         updateSiteData(systemKey, {
             loginStatus: 'Erro de conexão',
-            lastUpdate: new Date().toLocaleString('pt-BR'),
+            lastUpdate: lastUpdate,
             responseTime: `${responseTime}ms`,
             success: false
         });
+        
+        // Atualizar status no card geral
+        sistemasStatus[systemKey] = {
+            success: false,
+            lastUpdate: lastUpdate,
+            lastUpdateTimestamp: lastUpdateTimestamp,
+            registros: null
+        };
+        updateGeralCard();
+        
         addLog(`${system.name}: Erro de conexão - ${error.message}`, 'error');
     }
 }
@@ -276,14 +336,178 @@ document.querySelectorAll('.nav-item').forEach(item => {
             document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
             item.classList.add('active');
             
-            // Scroll para o card correspondente
-            const card = document.getElementById(`${system}-card`);
-            if (card) {
-                card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Mostrar/esconder cards conforme seleção
+            const allCards = document.querySelectorAll('.system-card');
+            allCards.forEach(card => {
+                card.style.display = 'none';
+            });
+            
+            if (system === 'geral') {
+                // Mostrar apenas o card geral
+                const geralCard = document.getElementById('geral-card');
+                if (geralCard) {
+                    geralCard.style.display = 'block';
+                    geralCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            } else {
+                // Mostrar apenas o card do sistema selecionado
+                const systemCard = document.getElementById(`${system}-card`);
+                if (systemCard) {
+                    systemCard.style.display = 'block';
+                    systemCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
             }
         }
     });
 });
+
+// Estado dos sistemas para o card geral
+const sistemasStatus = {
+    'viva-saude': { success: null, lastUpdate: null, lastUpdateTimestamp: null, registros: null },
+    'coop-vitta': { success: null, lastUpdate: null, lastUpdateTimestamp: null, registros: null },
+    'delta': { success: null, lastUpdate: null, lastUpdateTimestamp: null, registros: null }
+};
+
+// Atualizar card geral com informações consolidadas
+function updateGeralCard() {
+    const sistemas = Object.keys(sistemasStatus);
+    let operacionais = 0;
+    let problemas = 0;
+    let todosVerificados = true;
+    let ultimaVerificacao = null;
+    
+    const resumoHTML = [];
+    
+    sistemas.forEach(systemKey => {
+        const status = sistemasStatus[systemKey];
+        const system = systems[systemKey];
+        
+        if (status.success === null) {
+            todosVerificados = false;
+        } else if (status.success) {
+            operacionais++;
+        } else {
+            problemas++;
+        }
+        
+        // Atualizar última verificação (usar timestamp se disponível)
+        if (status.lastUpdateTimestamp || status.lastUpdate) {
+            const timestamp = status.lastUpdateTimestamp || (status.lastUpdate ? new Date(status.lastUpdate).getTime() : null);
+            if (timestamp && (!ultimaVerificacao || timestamp > ultimaVerificacao)) {
+                ultimaVerificacao = timestamp;
+            }
+        }
+        
+        // Criar resumo do sistema
+        const statusIcon = status.success === null ? '⏳' : status.success ? '✅' : '❌';
+        const statusText = status.success === null ? 'Aguardando...' : status.success ? 'Operacional' : 'Com Problemas';
+        const registrosText = status.registros !== null && status.registros !== undefined ? ` - ${status.registros} registros` : '';
+        
+        // Formatar hora da última atualização
+        let horaFormatada = '';
+        if (status.lastUpdateTimestamp) {
+            try {
+                const dataObj = new Date(status.lastUpdateTimestamp);
+                horaFormatada = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            } catch (e) {
+                horaFormatada = status.lastUpdate || '';
+            }
+        } else if (status.lastUpdate) {
+            try {
+                const dataObj = new Date(status.lastUpdate);
+                if (!isNaN(dataObj.getTime())) {
+                    horaFormatada = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                } else {
+                    // Tentar extrair hora da string
+                    const match = status.lastUpdate.match(/(\d{2}):(\d{2}):(\d{2})/);
+                    if (match) {
+                        horaFormatada = `${match[1]}:${match[2]}:${match[3]}`;
+                    } else {
+                        horaFormatada = status.lastUpdate.split(' ')[1] || status.lastUpdate;
+                    }
+                }
+            } catch (e) {
+                horaFormatada = status.lastUpdate;
+            }
+        }
+        
+        resumoHTML.push(`
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 6px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 18px;">${statusIcon}</span>
+                    <span style="font-weight: 500;">${system.name}</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <span style="font-size: 14px; color: rgba(255,255,255,0.7);">${statusText}${registrosText}</span>
+                    ${horaFormatada ? `<span style="font-size: 12px; color: rgba(255,255,255,0.5);">${horaFormatada}</span>` : ''}
+                </div>
+            </div>
+        `);
+    });
+    
+    // Atualizar elementos do card geral
+    const operacionaisEl = document.getElementById('geral-operacionais');
+    const problemasEl = document.getElementById('geral-problemas');
+    const statusGeralEl = document.getElementById('geral-status-geral');
+    const lastUpdateEl = document.getElementById('geral-last-update');
+    const statusBadge = document.getElementById('geral-status');
+    const statusText = document.getElementById('geral-status-text');
+    const resumoEl = document.getElementById('geral-sistemas-resumo');
+    
+    if (operacionaisEl) operacionaisEl.textContent = operacionais;
+    if (problemasEl) problemasEl.textContent = problemas;
+    
+    // Formatar última verificação (ultimaVerificacao agora é timestamp)
+    let ultimaVerificacaoFormatada = '-';
+    if (ultimaVerificacao) {
+        try {
+            const dataObj = new Date(ultimaVerificacao);
+            if (!isNaN(dataObj.getTime())) {
+                ultimaVerificacaoFormatada = dataObj.toLocaleString('pt-BR');
+            }
+        } catch (e) {
+            ultimaVerificacaoFormatada = '-';
+        }
+    }
+    if (lastUpdateEl) lastUpdateEl.textContent = ultimaVerificacaoFormatada;
+    if (resumoEl) resumoEl.innerHTML = resumoHTML.join('');
+    
+    // Atualizar status geral
+    if (!todosVerificados) {
+        if (statusGeralEl) {
+            statusGeralEl.textContent = 'Verificando...';
+            statusGeralEl.style.color = '#f59e0b';
+        }
+        if (statusBadge) {
+            statusBadge.className = 'status-indicator-modern checking';
+        }
+        if (statusText) {
+            statusText.textContent = 'Verificando sistemas...';
+        }
+    } else if (problemas === 0) {
+        if (statusGeralEl) {
+            statusGeralEl.textContent = 'Todos Operacionais';
+            statusGeralEl.style.color = '#10b981';
+        }
+        if (statusBadge) {
+            statusBadge.className = 'status-indicator-modern online';
+        }
+        if (statusText) {
+            statusText.textContent = 'Todos os sistemas estão operacionais';
+        }
+    } else {
+        if (statusGeralEl) {
+            statusGeralEl.textContent = 'Alguns Sistemas com Problemas';
+            statusGeralEl.style.color = '#ef4444';
+        }
+        if (statusBadge) {
+            statusBadge.className = 'status-indicator-modern offline';
+        }
+        if (statusText) {
+            statusText.textContent = `${problemas} sistema(s) com problemas`;
+        }
+    }
+}
 
 // Verificação inicial
 setTimeout(() => {
