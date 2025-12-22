@@ -29,19 +29,104 @@ async function fetchFinanceiroVivaSaude() {
     try {
         const response = await fetch(`${API_BASE_URL}/financeiro/viva-saude`);
         const data = await response.json();
-        
-        if (data.success && data.data) {
+
+        if (data.success) {
             // Atualizar elementos financeiros
             const totalEl = document.getElementById('viva-saude-financeiro-total');
             const updateEl = document.getElementById('viva-saude-financeiro-update');
             const statusEl = document.getElementById('viva-saude-financeiro-status');
             
+            // Exibir valores extraídos do CSV
+            if (data.valores) {
+                const valoresContainer = document.getElementById('viva-saude-financeiro-valores');
+                if (valoresContainer) {
+                    let html = '<div style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">';
+                    
+                    // VIVA RIO EM ABERTO
+                    html += `
+                        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border-left: 3px solid #10b981;">
+                            <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px; font-weight: 600;">VIVA RIO EM ABERTO</div>
+                            <div style="font-size: 16px; color: #10b981; font-weight: 500;">${data.valores.vivaRioEmAberto || 'Não encontrado'}</div>
+                        </div>
+                    `;
+                    
+                    // SETEMBRO
+                    if (data.valores.setembro) {
+                        html += `
+                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">SETEMBRO</div>
+                                <div style="font-size: 20px; font-weight: 600; color: #10b981;">${data.valores.setembro}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    // OUTUBRO
+                    if (data.valores.outubro) {
+                        html += `
+                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">OUTUBRO</div>
+                                <div style="font-size: 20px; font-weight: 600; color: #10b981;">${data.valores.outubro}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    // NOVEMBRO
+                    if (data.valores.novembro) {
+                        html += `
+                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">NOVEMBRO</div>
+                                <div style="font-size: 20px; font-weight: 600; color: #10b981;">${data.valores.novembro}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    // TOTAL
+                    if (data.valores.total) {
+                        html += `
+                            <div style="background: rgba(16, 185, 129, 0.1); padding: 15px; border-radius: 8px; border: 2px solid #10b981;">
+                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px; font-weight: 600;">TOTAL</div>
+                                <div style="font-size: 24px; font-weight: 700; color: #10b981;">${data.valores.total}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    html += '</div>';
+                    valoresContainer.innerHTML = html;
+                }
+            }
+            
+            // Atualizar dados por mês se disponível (manter compatibilidade)
+            const dadosPorMesContainer = document.getElementById('viva-saude-financeiro-meses');
+            if (dadosPorMesContainer && data.dadosPorMes) {
+                const meses = Object.values(data.dadosPorMes).sort((a, b) => a.mes - b.mes);
+                let htmlMeses = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">';
+                
+                meses.forEach(mesData => {
+                    const valorFormatado = new Intl.NumberFormat('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL'
+                    }).format(mesData.total);
+                    
+                    htmlMeses += `
+                        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                            <div style="font-size: 12px; color: rgba(255,255,255,0.6); margin-bottom: 8px; text-transform: capitalize;">${mesData.mesNome}</div>
+                            <div style="font-size: 20px; font-weight: 600; color: #10b981;">${valorFormatado}</div>
+                            <div style="font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 5px;">${mesData.valores.length} item(ns)</div>
+                        </div>
+                    `;
+                });
+                
+                htmlMeses += '</div>';
+                dadosPorMesContainer.innerHTML = htmlMeses;
+            }
+            
             if (totalEl) {
-                // Formatar valor total
+                // Formatar valor total (usar valor do CSV se disponível, senão usar valorTotal)
+                const valorTotal = data.valores?.total || data.valorTotal || 0;
                 const valorFormatado = new Intl.NumberFormat('pt-BR', {
                     style: 'currency',
                     currency: 'BRL'
-                }).format(data.valorTotal || 0);
+                }).format(valorTotal);
                 totalEl.textContent = valorFormatado;
             }
             
@@ -93,10 +178,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Inicializar card geral
     updateGeralCard();
     
+    // Verificar todos os logins
     checkAllLogins();
     
-    // Buscar dados financeiros do Viva Saúde
-    fetchFinanceiroVivaSaude();
+    // Buscar dados financeiros do Viva Saúde (Google Sheets - pausado temporariamente)
+    // fetchFinanceiroVivaSaude();
     
     // Iniciar auto-refresh automático a cada 24 horas
     startAutoRefresh();
@@ -119,11 +205,17 @@ async function checkServerHealth() {
 // Event listeners
 function initializeEventListeners() {
     // Botões de refresh individuais (se ainda existirem)
+    // TEMPORÁRIO: Desabilitado para focar apenas no Google Sheets
     document.querySelectorAll('.refresh-btn-modern').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const site = e.target.closest('.refresh-btn-modern').dataset.site;
             if (site) {
                 checkLogin(site);
+                
+                // Buscar dados financeiros apenas para Viva Saúde (Google Sheets - pausado temporariamente)
+                // if (site === 'viva-saude') {
+                //     fetchFinanceiroVivaSaude();
+                // }
             }
         });
     });
@@ -142,6 +234,9 @@ async function checkAllLogins() {
             await checkLogin('delta');
         })()
     ]);
+    
+    // Buscar dados financeiros do Viva Saúde (Google Sheets - pausado temporariamente)
+    // fetchFinanceiroVivaSaude();
     
     addLog('Verificação de todos os sistemas concluída', 'success');
 }
@@ -373,8 +468,11 @@ function startAutoRefresh() {
     }
     
     autoRefreshInterval = setInterval(() => {
-        addLog('Auto-refresh: Verificando todos os sistemas...', 'info');
+        addLog('Auto-refresh: Atualizando todos os sistemas...', 'info');
         checkAllLogins();
+        
+        // Buscar dados financeiros do Viva Saúde (Google Sheets - pausado temporariamente)
+        // fetchFinanceiroVivaSaude();
     }, AUTO_REFRESH_INTERVAL);
     
     addLog(`Auto-refresh automático ativado (24 horas)`, 'success');
@@ -431,9 +529,10 @@ document.querySelectorAll('.nav-item').forEach(item => {
                     financeiroCard.style.display = 'block';
                     
                     // Se for Viva Saúde, buscar dados financeiros quando o card for exibido
-                    if (system === 'viva-saude') {
-                        fetchFinanceiroVivaSaude();
-                    }
+                    // (Google Sheets - pausado temporariamente)
+                    // if (system === 'viva-saude' || system === 'geral') {
+                    //     fetchFinanceiroVivaSaude();
+                    // }
                 }
             }
         }

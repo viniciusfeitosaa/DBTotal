@@ -1607,8 +1607,182 @@ async function loginDoctorID(username, password) {
     }
 }
 
+// Função para processar CSV e extrair valores financeiros
+function processarCSVFinanceiro(csvContent) {
+    const valores = {
+        vivaRioEmAberto: null,
+        setembro: null,
+        outubro: null,
+        novembro: null,
+        total: null
+    };
+    
+    try {
+        // Parsear CSV
+        const lines = csvContent.split('\n').filter(line => line.trim());
+        
+        if (lines.length === 0) {
+            console.log('[GOOGLE SHEETS] CSV vazio');
+            return valores;
+        }
+        
+        // Função para parsear linha CSV (lidar com vírgulas dentro de aspas)
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+        
+        // Procurar por "VIVA RIO EM ABERTO"
+        let linhaVivaRio = null;
+        let indiceVivaRio = -1;
+        
+        for (let i = 0; i < lines.length; i++) {
+            const linha = lines[i].toUpperCase();
+            if (linha.includes('VIVA RIO EM ABERTO') || linha.includes('VIVA RIO')) {
+                linhaVivaRio = parseCSVLine(lines[i]);
+                indiceVivaRio = i;
+                console.log(`[GOOGLE SHEETS] Linha "VIVA RIO EM ABERTO" encontrada na linha ${i + 1}`);
+                break;
+            }
+        }
+        
+        if (linhaVivaRio) {
+            valores.vivaRioEmAberto = 'Encontrado';
+            
+            // Procurar cabeçalhos de meses nas primeiras linhas
+            let indiceSetembro = -1;
+            let indiceOutubro = -1;
+            let indiceNovembro = -1;
+            let indiceTotal = -1;
+            
+            // Procurar cabeçalhos nas primeiras 10 linhas
+            for (let i = 0; i < Math.min(10, lines.length); i++) {
+                const linha = parseCSVLine(lines[i]);
+                const linhaUpper = lines[i].toUpperCase();
+                
+                for (let j = 0; j < linha.length; j++) {
+                    const coluna = linha[j].toUpperCase().trim();
+                    if ((coluna.includes('SETEMBRO') || coluna.includes('SET')) && indiceSetembro === -1) {
+                        indiceSetembro = j;
+                        console.log(`[GOOGLE SHEETS] Coluna Setembro encontrada no índice ${j}`);
+                    }
+                    if ((coluna.includes('OUTUBRO') || coluna.includes('OUT')) && indiceOutubro === -1) {
+                        indiceOutubro = j;
+                        console.log(`[GOOGLE SHEETS] Coluna Outubro encontrada no índice ${j}`);
+                    }
+                    if ((coluna.includes('NOVEMBRO') || coluna.includes('NOV')) && indiceNovembro === -1) {
+                        indiceNovembro = j;
+                        console.log(`[GOOGLE SHEETS] Coluna Novembro encontrada no índice ${j}`);
+                    }
+                    if (coluna.includes('TOTAL') && indiceTotal === -1) {
+                        indiceTotal = j;
+                        console.log(`[GOOGLE SHEETS] Coluna Total encontrada no índice ${j}`);
+                    }
+                }
+            }
+            
+            // Buscar valores na linha VIVA RIO usando os índices das colunas
+            if (indiceSetembro >= 0 && indiceSetembro < linhaVivaRio.length) {
+                valores.setembro = linhaVivaRio[indiceSetembro].trim();
+                console.log(`[GOOGLE SHEETS] Setembro (coluna ${indiceSetembro}): ${valores.setembro}`);
+            }
+            if (indiceOutubro >= 0 && indiceOutubro < linhaVivaRio.length) {
+                valores.outubro = linhaVivaRio[indiceOutubro].trim();
+                console.log(`[GOOGLE SHEETS] Outubro (coluna ${indiceOutubro}): ${valores.outubro}`);
+            }
+            if (indiceNovembro >= 0 && indiceNovembro < linhaVivaRio.length) {
+                valores.novembro = linhaVivaRio[indiceNovembro].trim();
+                console.log(`[GOOGLE SHEETS] Novembro (coluna ${indiceNovembro}): ${valores.novembro}`);
+            }
+            if (indiceTotal >= 0 && indiceTotal < linhaVivaRio.length) {
+                valores.total = linhaVivaRio[indiceTotal].trim();
+                console.log(`[GOOGLE SHEETS] Total (coluna ${indiceTotal}): ${valores.total}`);
+            }
+            
+            // Se não encontrou pelos cabeçalhos, procurar nas linhas seguintes
+            if (!valores.setembro || !valores.outubro || !valores.novembro || !valores.total) {
+                for (let i = indiceVivaRio; i < Math.min(indiceVivaRio + 5, lines.length); i++) {
+                    const linha = parseCSVLine(lines[i]);
+                    const linhaUpper = lines[i].toUpperCase();
+                    
+                    // Procurar por SETEMBRO
+                    if (linhaUpper.includes('SETEMBRO') && !valores.setembro) {
+                        for (let j = 0; j < linha.length; j++) {
+                            const valor = linha[j].trim();
+                            if (valor && valor.match(/[\d.,]+/)) {
+                                valores.setembro = valor;
+                                console.log(`[GOOGLE SHEETS] Setembro encontrado na linha ${i + 1}: ${valor}`);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Procurar por OUTUBRO
+                    if (linhaUpper.includes('OUTUBRO') && !valores.outubro) {
+                        for (let j = 0; j < linha.length; j++) {
+                            const valor = linha[j].trim();
+                            if (valor && valor.match(/[\d.,]+/)) {
+                                valores.outubro = valor;
+                                console.log(`[GOOGLE SHEETS] Outubro encontrado na linha ${i + 1}: ${valor}`);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Procurar por NOVEMBRO
+                    if (linhaUpper.includes('NOVEMBRO') && !valores.novembro) {
+                        for (let j = 0; j < linha.length; j++) {
+                            const valor = linha[j].trim();
+                            if (valor && valor.match(/[\d.,]+/)) {
+                                valores.novembro = valor;
+                                console.log(`[GOOGLE SHEETS] Novembro encontrado na linha ${i + 1}: ${valor}`);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Procurar por TOTAL
+                    if (linhaUpper.includes('TOTAL') && !valores.total) {
+                        for (let j = 0; j < linha.length; j++) {
+                            const valor = linha[j].trim();
+                            if (valor && valor.match(/[\d.,]+/)) {
+                                valores.total = valor;
+                                console.log(`[GOOGLE SHEETS] Total encontrado na linha ${i + 1}: ${valor}`);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            console.log('[GOOGLE SHEETS] ⚠️ Linha "VIVA RIO EM ABERTO" não encontrada no CSV');
+        }
+        
+        console.log('[GOOGLE SHEETS] Valores extraídos:', valores);
+        return valores;
+        
+    } catch (error) {
+        console.error('[GOOGLE SHEETS] Erro ao processar CSV:', error);
+        return valores;
+    }
+}
 
-// Função para extrair dados financeiros do Google Sheets
+// Função para acessar a planilha do Google Sheets
 async function fetchGoogleSheetsFinanceiro() {
     let browser = null;
     try {
@@ -1626,16 +1800,50 @@ async function fetchGoogleSheetsFinanceiro() {
         
         const page = await browser.newPage();
         
-        // Primeiro, acessar a página de visualização para carregar a planilha
+        // Acessar a página da planilha
         console.log('[GOOGLE SHEETS] Carregando página da planilha...');
         await page.goto(viewUrl, {
             waitUntil: 'networkidle2',
-            timeout: 30000
+            timeout: 60000
         });
+        
+        // Verificar se a página carregou corretamente
+        const pageTitle = await page.title();
+        console.log(`[GOOGLE SHEETS] Título da página: ${pageTitle}`);
+        
+        // Verificar se há mensagens de erro de permissão
+        const hasPermissionError = await page.evaluate(() => {
+            const bodyText = document.body.textContent || '';
+            return bodyText.includes('Você precisa de permissão') || 
+                   bodyText.includes('permission') ||
+                   bodyText.includes('acesso negado') ||
+                   bodyText.includes('access denied');
+        });
+        
+        if (hasPermissionError) {
+            console.log('[GOOGLE SHEETS] ⚠️ Possível problema de permissão detectado');
+        } else {
+            console.log('[GOOGLE SHEETS] ✅ Nenhum erro de permissão detectado');
+        }
         
         // Aguardar a planilha carregar completamente
         console.log('[GOOGLE SHEETS] Aguardando planilha renderizar...');
         await delay(5000);
+        
+        // Verificar se a planilha está visível
+        const planilhaStatus = await page.evaluate(() => {
+            const gridCells = document.querySelectorAll('[role="gridcell"]');
+            const hasSheets = document.querySelectorAll('[role="tab"], .docs-sheet-tab').length > 0;
+            return {
+                celulasEncontradas: gridCells.length,
+                abasEncontradas: hasSheets,
+                urlAtual: window.location.href
+            };
+        });
+        
+        console.log(`[GOOGLE SHEETS] Status da planilha: ${planilhaStatus.celulasEncontradas} células encontradas`);
+        console.log(`[GOOGLE SHEETS] Abas encontradas: ${planilhaStatus.abasEncontradas ? 'Sim' : 'Não'}`);
+        console.log(`[GOOGLE SHEETS] URL atual: ${planilhaStatus.urlAtual}`);
         
         // Primeiro, identificar a aba "RELATÓRIO CYLLA" e obter seu gid
         console.log('[GOOGLE SHEETS] Procurando aba "RELATÓRIO CYLLA"...');
@@ -1734,357 +1942,176 @@ async function fetchGoogleSheetsFinanceiro() {
             });
             
             await delay(3000); // Aguardar aba carregar
+            console.log('[GOOGLE SHEETS] ✅ Aba "RELATÓRIO CYLLA" ativada');
+        } else {
+            console.log('[GOOGLE SHEETS] ⚠️ Aba "RELATÓRIO CYLLA" não encontrada');
         }
         
-        // Tentar extrair dados diretamente da página HTML do Google Sheets (intervalo A2:H37)
-        console.log('[GOOGLE SHEETS] Extraindo dados do intervalo A2:H37 da aba "RELATÓRIO CYLLA"...');
-        const planilhaData = await page.evaluate(() => {
-            const result = {
-                headers: [],
-                rows: [],
-                rawText: ''
+        // Verificar status final da planilha
+        const statusFinal = await page.evaluate(() => {
+            const gridCells = document.querySelectorAll('[role="gridcell"]');
+            const activeTab = document.querySelector('[role="tab"][aria-selected="true"], .docs-sheet-tab[aria-selected="true"]');
+            return {
+                celulasEncontradas: gridCells.length,
+                abaAtiva: activeTab ? (activeTab.textContent || activeTab.getAttribute('aria-label') || '') : null,
+                urlAtual: window.location.href
             };
-            
-            // Função para converter letra de coluna para número (A=0, B=1, ..., H=7)
-            function colLetterToNumber(letter) {
-                return letter.charCodeAt(0) - 65; // A=65 em ASCII
-            }
-            
-            // Intervalo desejado: A2:H37 (linhas 2-37, colunas A-H)
-            const startRow = 2;
-            const endRow = 37;
-            const startCol = 0; // A
-            const endCol = 7;   // H
-            
-            // Tentar encontrar células da planilha do Google Sheets
-            // Google Sheets usa diferentes seletores dependendo da versão
-            const allCells = document.querySelectorAll('[role="gridcell"], [data-row], [data-col], .s0, .s1, .s2, .grid-cell');
-            
-            console.log(`[GOOGLE SHEETS-BROWSER] Total de células encontradas: ${allCells.length}`);
-            
-            if (allCells.length > 0) {
-                // Mapear células por posição (row, col)
-                const cellsMap = new Map();
-                
-                allCells.forEach(cell => {
-                    // Tentar diferentes métodos para obter posição
-                    let row = null;
-                    let col = null;
-                    
-                    // Método 1: Atributos data-row e data-col
-                    const dataRow = cell.getAttribute('data-row');
-                    const dataCol = cell.getAttribute('data-col');
-                    
-                    if (dataRow !== null && dataCol !== null) {
-                        row = parseInt(dataRow);
-                        col = parseInt(dataCol);
-                    } else {
-                        // Método 2: Procurar no elemento pai
-                        const parent = cell.closest('[data-row]');
-                        if (parent) {
-                            row = parseInt(parent.getAttribute('data-row') || '0');
-                            col = parseInt(parent.getAttribute('data-col') || '0');
-                        }
-                    }
-                    
-                    // Método 3: Tentar extrair da classe ou ID
-                    if (row === null || col === null) {
-                        const classMatch = cell.className.match(/r(\d+)c(\d+)/);
-                        if (classMatch) {
-                            row = parseInt(classMatch[1]);
-                            col = parseInt(classMatch[2]) - 1; // Google Sheets usa 1-indexed
-                        }
-                    }
-                    
-                    if (row !== null && col !== null) {
-                        const text = cell.textContent?.trim() || cell.innerText?.trim() || '';
-                        const key = `${row}-${col}`;
-                        if (!cellsMap.has(key)) {
-                            cellsMap.set(key, { row, col, text });
-                        }
-                    }
-                });
-                
-                console.log(`[GOOGLE SHEETS-BROWSER] Células mapeadas: ${cellsMap.size}`);
-                
-                // Extrair dados do intervalo A2:H37
-                const rowsMap = new Map();
-                
-                for (let r = startRow; r <= endRow; r++) {
-                    const rowData = [];
-                    for (let c = startCol; c <= endCol; c++) {
-                        const key = `${r}-${c}`;
-                        const cell = cellsMap.get(key);
-                        rowData.push(cell ? cell.text : '');
-                    }
-                    
-                    // Só adicionar linha se tiver algum conteúdo
-                    if (rowData.some(cell => cell.trim() !== '')) {
-                        rowsMap.set(r, rowData);
-                    }
-                }
-                
-                // Converter para arrays ordenados
-                const sortedRows = Array.from(rowsMap.entries()).sort((a, b) => a[0] - b[0]);
-                
-                // Primeira linha (A2) pode ser cabeçalho, resto são dados
-                if (sortedRows.length > 0) {
-                    result.headers = sortedRows[0][1]; // Linha 2 como cabeçalho
-                    for (let i = 1; i < sortedRows.length; i++) {
-                        result.rows.push(sortedRows[i][1]);
-                    }
-                }
-            }
-            
-            // Se não encontrou células estruturadas, tentar método alternativo
-            if (result.headers.length === 0) {
-                console.log('[GOOGLE SHEETS-BROWSER] Método 1 falhou, tentando método alternativo...');
-                
-                // Método alternativo: procurar por tabelas ou elementos de planilha
-                const tables = document.querySelectorAll('table, [role="table"], [role="grid"]');
-                if (tables.length > 0) {
-                    const table = tables[0];
-                    const allRows = table.querySelectorAll('tr, [role="row"]');
-                    
-                    // Pular primeira linha (linha 1), começar da linha 2 (A2)
-                    for (let i = 1; i < allRows.length && i <= endRow; i++) {
-                        const row = allRows[i];
-                        const cells = row.querySelectorAll('td, th, [role="gridcell"]');
-                        const rowData = [];
-                        
-                        // Extrair apenas colunas A-H (índices 0-7)
-                        for (let j = 0; j <= endCol && j < cells.length; j++) {
-                            rowData.push(cells[j]?.textContent?.trim() || '');
-                        }
-                        
-                        if (rowData.length > 0 && rowData.some(cell => cell !== '')) {
-                            if (i === 1) {
-                                result.headers = rowData;
-                            } else {
-                                result.rows.push(rowData);
-                            }
-                        }
-                    }
-                }
-            }
-            
-            return result;
         });
         
-        console.log(`[GOOGLE SHEETS] Dados extraídos do intervalo A2:H37: ${planilhaData.headers.length} colunas, ${planilhaData.rows.length} linhas`);
+        console.log(`[GOOGLE SHEETS] Status final: ${statusFinal.celulasEncontradas} células encontradas`);
+        console.log(`[GOOGLE SHEETS] Aba ativa: "${statusFinal.abaAtiva || 'nenhuma'}"`);
         
-        // Validar que extraiu dados do intervalo correto (A-H = 8 colunas)
-        if (planilhaData.headers.length > 0 && planilhaData.headers.length !== 8) {
-            console.log(`[GOOGLE SHEETS] ⚠️ Aviso: Esperado 8 colunas (A-H), encontrado ${planilhaData.headers.length}`);
+        // Acessar menu Arquivo e baixar CSV
+        console.log('[GOOGLE SHEETS] Acessando menu Arquivo...');
+        
+        // Configurar download
+        const downloadsDir = path.join(__dirname, 'downloads');
+        if (!fs.existsSync(downloadsDir)) {
+            fs.mkdirSync(downloadsDir, { recursive: true });
         }
         
-        let csvText = '';
+        const client = await page.target().createCDPSession();
+        await client.send('Page.setDownloadBehavior', {
+            behavior: 'allow',
+            downloadPath: downloadsDir
+        });
         
-        // Se conseguiu extrair dados estruturados
-        if (planilhaData.headers.length > 0) {
-            // Garantir que temos exatamente 8 colunas (A-H)
-            const headers = planilhaData.headers.slice(0, 8);
-            csvText = headers.join(',') + '\n';
-            
-            planilhaData.rows.forEach(row => {
-                // Garantir que cada linha tem no máximo 8 colunas (A-H)
-                const rowData = row.slice(0, 8);
-                // Preencher com strings vazias se faltar colunas
-                while (rowData.length < 8) {
-                    rowData.push('');
-                }
-                csvText += rowData.join(',') + '\n';
-            });
-            
-            console.log(`[GOOGLE SHEETS] ✅ Dados do intervalo A2:H37 convertidos para CSV (${planilhaData.rows.length} linhas de dados)`);
-        } else if (planilhaData.rawText) {
-            // Tentar usar o texto bruto como CSV e processar apenas A2:H37
-            console.log('[GOOGLE SHEETS] Processando texto bruto e extraindo intervalo A2:H37...');
-            const lines = planilhaData.rawText.split('\n').filter(line => line.trim());
-            if (lines.length >= 2) {
-                // Pular linha 1, começar da linha 2 (A2)
-                // Processar até linha 37
-                const dataLines = lines.slice(1, 38); // linhas 2-37 (índices 1-37)
-                csvText = dataLines.join('\n');
-                console.log(`[GOOGLE SHEETS] Extraídas ${dataLines.length} linhas do texto bruto`);
-            } else {
-                csvText = planilhaData.rawText;
+        // Procurar e clicar no menu Arquivo
+        const menuArquivoEncontrado = await page.evaluate(() => {
+            const menuArquivo = document.querySelector('#docs-file-menu, [id="docs-file-menu"]');
+            if (menuArquivo) {
+                menuArquivo.click();
+                return true;
             }
-        } else {
-            // Se não conseguiu extrair, tentar baixar CSV diretamente e processar intervalo
-            console.log('[GOOGLE SHEETS] Tentando baixar CSV diretamente da aba "RELATÓRIO CYLLA"...');
-            
-            // Usar o gid da aba encontrada, ou tentar sem gid (pega a primeira aba ativa)
-            const gidToUse = abaInfo.gid || '0';
-            const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gidToUse}`;
-            console.log(`[GOOGLE SHEETS] URL do CSV: ${csvUrl}`);
-            
-            const response = await page.goto(csvUrl, {
-                waitUntil: 'networkidle2',
-                timeout: 30000
-            });
-            
-            if (response && response.ok()) {
-                const fullCsv = await page.evaluate(() => {
-                    return document.body.innerText || document.body.textContent || '';
-                });
-                
-                // Processar CSV completo e extrair apenas A2:H37
-                const allLines = fullCsv.split('\n').filter(line => line.trim());
-                if (allLines.length >= 2) {
-                    // Linha 2 é o cabeçalho, linhas 3-37 são os dados
-                    const headerLine = allLines[1]; // Linha 2 (índice 1)
-                    const dataLines = allLines.slice(2, 38); // Linhas 3-37 (índices 2-37)
-                    
-                    // Extrair apenas colunas A-H (primeiras 8 colunas)
-                    const headerCols = headerLine.split(',').slice(0, 8);
-                    csvText = headerCols.join(',') + '\n';
-                    
-                    dataLines.forEach(line => {
-                        const cols = line.split(',').slice(0, 8);
-                        while (cols.length < 8) cols.push('');
-                        csvText += cols.join(',') + '\n';
-                    });
-                    
-                    console.log(`[GOOGLE SHEETS] ✅ Intervalo A2:H37 extraído do CSV completo (${dataLines.length} linhas)`);
+            return false;
+        });
+        
+        if (!menuArquivoEncontrado) {
+            // Tentar métodos alternativos
+            await page.evaluate(() => {
+                const menuArquivo = document.querySelector('[role="menuitem"][aria-label*="Arquivo"], [role="menuitem"]:contains("Arquivo")');
+                if (menuArquivo) {
+                    menuArquivo.click();
                 } else {
-                    csvText = fullCsv;
+                    // Tentar por texto
+                    const elementos = Array.from(document.querySelectorAll('*'));
+                    const arquivoElement = elementos.find(el => el.textContent && el.textContent.trim() === 'Arquivo');
+                    if (arquivoElement) {
+                        arquivoElement.click();
+                    }
                 }
-            } else {
-                throw new Error(`Não foi possível acessar CSV: status ${response?.status() || 'Sem resposta'}`);
-            }
+            });
         }
+        
+        await delay(1000); // Aguardar menu abrir
+        
+        // Procurar opção "Baixar" no menu
+        console.log('[GOOGLE SHEETS] Procurando opção "Baixar"...');
+        const baixarEncontrado = await page.evaluate(() => {
+            // Procurar por texto "Baixar" ou "Download"
+            const elementos = Array.from(document.querySelectorAll('[role="menuitem"], [role="menu"] [role="menuitem"]'));
+            const baixarElement = elementos.find(el => {
+                const text = el.textContent || el.innerText || el.getAttribute('aria-label') || '';
+                return text.includes('Baixar') || text.includes('Download') || text.includes('Download');
+            });
+            
+            if (baixarElement) {
+                baixarElement.click();
+                return true;
+            }
+            return false;
+        });
+        
+        if (!baixarEncontrado) {
+            console.log('[GOOGLE SHEETS] ⚠️ Opção "Baixar" não encontrada, tentando métodos alternativos...');
+            // Tentar usar teclado
+            await page.keyboard.press('ArrowDown');
+            await delay(500);
+            await page.keyboard.press('ArrowDown');
+            await delay(500);
+        } else {
+            await delay(1000); // Aguardar submenu abrir
+        }
+        
+        // Procurar opção CSV no submenu
+        console.log('[GOOGLE SHEETS] Procurando opção CSV...');
+        const csvEncontrado = await page.evaluate(() => {
+            const elementos = Array.from(document.querySelectorAll('[role="menuitem"]'));
+            const csvElement = elementos.find(el => {
+                const text = el.textContent || el.innerText || el.getAttribute('aria-label') || '';
+                return text.includes('CSV') || text.includes('.csv') || text.toLowerCase().includes('valores separados');
+            });
+            
+            if (csvElement) {
+                csvElement.click();
+                return true;
+            }
+            return false;
+        });
+        
+        if (!csvEncontrado) {
+            console.log('[GOOGLE SHEETS] ⚠️ Opção CSV não encontrada, tentando navegação por teclado...');
+            // Tentar navegar com teclado até CSV
+            await page.keyboard.press('ArrowDown');
+            await delay(300);
+            await page.keyboard.press('Enter');
+        } else {
+            console.log('[GOOGLE SHEETS] ✅ Opção CSV encontrada e clicada');
+        }
+        
+        // Aguardar download iniciar
+        await delay(2000);
+        
+        // Procurar arquivo CSV baixado
+        console.log('[GOOGLE SHEETS] Procurando arquivo CSV baixado...');
+        const arquivos = fs.readdirSync(downloadsDir);
+        const arquivosCSV = arquivos.filter(f => f.endsWith('.csv'));
+        
+        if (arquivosCSV.length === 0) {
+            console.log('[GOOGLE SHEETS] ⚠️ Nenhum arquivo CSV encontrado no diretório de downloads');
+            await browser.close();
+            browser = null;
+            
+            return {
+                success: false,
+                message: 'Download do CSV não foi iniciado',
+                error: 'Nenhum arquivo CSV encontrado'
+            };
+        }
+        
+        // Pegar o arquivo mais recente
+        const arquivoCSV = arquivosCSV.map(f => {
+            const filePath = path.join(downloadsDir, f);
+            const stats = fs.statSync(filePath);
+            return {
+                name: f,
+                path: filePath,
+                mtime: stats.mtime.getTime()
+            };
+        }).sort((a, b) => b.mtime - a.mtime)[0];
+        
+        console.log(`[GOOGLE SHEETS] ✅ Arquivo CSV encontrado: ${arquivoCSV.name}`);
         
         await browser.close();
         browser = null;
         
-        if (!csvText || csvText.trim().length === 0) {
-            throw new Error('Planilha retornou conteúdo vazio');
-        }
+        // Ler conteúdo do CSV
+        const csvContent = fs.readFileSync(arquivoCSV.path, 'utf-8');
+        console.log(`[GOOGLE SHEETS] CSV lido: ${csvContent.length} caracteres`);
         
-        console.log('[GOOGLE SHEETS] Dados obtidos, processando...');
-        
-        // Processar CSV
-        const lines = csvText.split('\n').filter(line => line.trim());
-        if (lines.length === 0) {
-            throw new Error('Planilha está vazia');
-        }
-        
-        // Função para parsear CSV
-        function parseCSVLine(line) {
-            const result = [];
-            let current = '';
-            let inQuotes = false;
-            
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
-                if (char === '"') {
-                    inQuotes = !inQuotes;
-                } else if (char === ',' && !inQuotes) {
-                    result.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            result.push(current.trim());
-            return result;
-        }
-        
-        // Parsear cabeçalhos
-        const headers = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, ''));
-        
-        // Parsear dados
-        const data = [];
-        for (let i = 1; i < lines.length; i++) {
-            const values = parseCSVLine(lines[i]).map(v => v.replace(/^"|"$/g, ''));
-            if (values.length === 0 || values.every(v => !v)) continue;
-            
-            const rowData = {};
-            headers.forEach((header, index) => {
-                rowData[header] = values[index] || '';
-            });
-            data.push(rowData);
-        }
-        
-        console.log(`[GOOGLE SHEETS] ✅ Dados processados: ${data.length} linhas, ${headers.length} colunas`);
-        console.log(`[GOOGLE SHEETS] Cabeçalhos: ${headers.join(', ')}`);
-        
-        // Identificar colunas financeiras (procurar por padrões comuns)
-        const valorColumns = headers.filter(h => {
-            const lower = h.toLowerCase();
-            return lower.includes('valor') || 
-                   lower.includes('total') || 
-                   lower.includes('financeiro') ||
-                   lower.includes('receita') ||
-                   lower.includes('faturamento') ||
-                   lower.includes('saldo') ||
-                   lower.includes('montante') ||
-                   lower.includes('quantia');
-        });
-        
-        console.log(`[GOOGLE SHEETS] Colunas financeiras identificadas: ${valorColumns.join(', ') || 'Nenhuma'}`);
-        
-        // Calcular valor total
-        let valorTotal = 0;
-        const valoresPorLinha = [];
-        
-        data.forEach((row, index) => {
-            let linhaTotal = 0;
-            
-            // Se encontrou colunas específicas, usar elas
-            if (valorColumns.length > 0) {
-                valorColumns.forEach(col => {
-                    const value = row[col];
-                    if (value) {
-                        const numValue = parseFloat(
-                            value.toString()
-                                .replace(/[^\d,.-]/g, '')
-                                .replace(',', '.')
-                        );
-                        if (!isNaN(numValue)) {
-                            linhaTotal += numValue;
-                        }
-                    }
-                });
-            } else {
-                // Se não encontrou colunas específicas, tentar todas as colunas numéricas
-                headers.forEach(header => {
-                    const value = row[header];
-                    if (value) {
-                        // Tentar identificar se é um valor monetário
-                        const strValue = value.toString();
-                        if (strValue.match(/[\d.,]+/) && (strValue.includes('R$') || strValue.includes(',') || strValue.includes('.'))) {
-                            const numValue = parseFloat(
-                                strValue
-                                    .replace(/[^\d,.-]/g, '')
-                                    .replace(',', '.')
-                            );
-                            if (!isNaN(numValue) && numValue > 0) {
-                                linhaTotal += numValue;
-                            }
-                        }
-                    }
-                });
-            }
-            
-            if (linhaTotal > 0) {
-                valoresPorLinha.push({ linha: index + 2, valor: linhaTotal });
-                valorTotal += linhaTotal;
-            }
-        });
-        
-        console.log(`[GOOGLE SHEETS] Valor total calculado: R$ ${valorTotal.toFixed(2)}`);
-        console.log(`[GOOGLE SHEETS] Linhas com valores: ${valoresPorLinha.length}`);
+        // Processar CSV e extrair valores específicos
+        console.log('[GOOGLE SHEETS] Processando CSV para extrair valores...');
+        const valores = processarCSVFinanceiro(csvContent);
         
         return {
             success: true,
-            data: data,
-            headers: headers,
-            totalRows: data.length,
-            valorTotal: valorTotal,
-            valorColumns: valorColumns,
-            valoresPorLinha: valoresPorLinha,
+            message: 'CSV baixado com sucesso',
+            abaEncontrada: abaInfo.encontrada,
+            abaNome: abaInfo.nome || 'RELATÓRIO CYLLA',
+            abaGid: abaInfo.gid,
+            arquivoCSV: arquivoCSV.name,
+            csvContent: csvContent,
+            valores: valores,
             lastUpdate: new Date().toISOString()
         };
         
@@ -2096,7 +2123,7 @@ async function fetchGoogleSheetsFinanceiro() {
         return {
             success: false,
             error: error.message,
-            data: null
+            message: 'Erro ao acessar planilha'
         };
     }
 }
@@ -2108,11 +2135,7 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
         res.json(result);
     } catch (error) {
         console.error('Erro ao buscar dados financeiros:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Erro ao buscar dados financeiros',
-            message: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -2143,8 +2166,7 @@ app.post('/api/check-login/:system', async (req, res) => {
             return res.status(400).json({ error: 'Sistema não suportado' });
         }
 
-        // Retornar status do login e dados (se disponível)
-        res.json({ 
+        res.json({
             success: loginResult.success !== false,
             message: loginResult.success !== false ? 'Login bem-sucedido' : 'Falha no login',
             system: creds.system,
@@ -2152,10 +2174,45 @@ app.post('/api/check-login/:system', async (req, res) => {
         });
     } catch (error) {
         console.error('Erro ao verificar login:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Rota para fazer login manual
+app.post('/api/rhid/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Usuário e senha são obrigatórios' });
+        }
+
+        const loginResult = await loginRHID(username, password);
+        
+        if (loginResult.success) {
+            const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            sessions.set(sessionId, {
+                cookies: loginResult.cookies,
+                createdAt: new Date()
+            });
+            
+            res.json({ 
+                success: true, 
+                sessionId,
+                message: 'Login realizado com sucesso'
+            });
+        } else {
+            res.status(401).json({ 
+                success: false, 
+                error: 'Credenciais inválidas' 
+            });
+        }
+    } catch (error) {
+        console.error('Erro ao fazer login:', error);
         res.status(500).json({ 
-            success: false,
-            error: 'Erro ao verificar login', 
-            message: error.message 
+            success: false, 
+            error: 'Erro ao fazer login',
+            message: error.message
         });
     }
 });
