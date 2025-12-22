@@ -24,6 +24,57 @@ const systems = {
 let autoRefreshInterval = null;
 const AUTO_REFRESH_INTERVAL = 24 * 60 * 60 * 1000; // 24 horas
 
+// Buscar dados financeiros do Viva Saúde
+async function fetchFinanceiroVivaSaude() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/financeiro/viva-saude`);
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+            // Atualizar elementos financeiros
+            const totalEl = document.getElementById('viva-saude-financeiro-total');
+            const updateEl = document.getElementById('viva-saude-financeiro-update');
+            const statusEl = document.getElementById('viva-saude-financeiro-status');
+            
+            if (totalEl) {
+                // Formatar valor total
+                const valorFormatado = new Intl.NumberFormat('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL'
+                }).format(data.valorTotal || 0);
+                totalEl.textContent = valorFormatado;
+            }
+            
+            if (updateEl) {
+                const updateDate = new Date(data.lastUpdate);
+                updateEl.textContent = updateDate.toLocaleString('pt-BR');
+            }
+            
+            if (statusEl) {
+                statusEl.textContent = 'Atualizado';
+                statusEl.style.color = '#10b981';
+            }
+            
+            console.log('[FRONTEND] Dados financeiros atualizados:', data);
+        } else {
+            // Atualizar status de erro
+            const statusEl = document.getElementById('viva-saude-financeiro-status');
+            if (statusEl) {
+                statusEl.textContent = 'Erro ao carregar';
+                statusEl.style.color = '#ef4444';
+            }
+            console.error('[FRONTEND] Erro ao buscar dados financeiros:', data.error);
+        }
+    } catch (error) {
+        console.error('[FRONTEND] Erro ao buscar dados financeiros:', error);
+        const statusEl = document.getElementById('viva-saude-financeiro-status');
+        if (statusEl) {
+            statusEl.textContent = 'Erro de conexão';
+            statusEl.style.color = '#ef4444';
+        }
+    }
+}
+
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
@@ -43,6 +94,10 @@ document.addEventListener('DOMContentLoaded', () => {
     updateGeralCard();
     
     checkAllLogins();
+    
+    // Buscar dados financeiros do Viva Saúde
+    fetchFinanceiroVivaSaude();
+    
     // Iniciar auto-refresh automático a cada 24 horas
     startAutoRefresh();
 });
@@ -78,10 +133,15 @@ function initializeEventListeners() {
 async function checkAllLogins() {
     addLog('Iniciando verificação de todos os sistemas...', 'info');
     
-    // Verificar todos os sistemas
-    await checkLogin('viva-saude');
-    await checkLogin('coop-vitta');
-    await checkLogin('delta');
+    // Verificar sistemas em paralelo, mas Coop Vitta e Delta sequencialmente
+    // (para evitar conflito no diretório de downloads de CSV)
+    await Promise.all([
+        checkLogin('viva-saude'),
+        (async () => {
+            await checkLogin('coop-vitta');
+            await checkLogin('delta');
+        })()
+    ]);
     
     addLog('Verificação de todos os sistemas concluída', 'success');
 }
@@ -350,11 +410,30 @@ document.querySelectorAll('.nav-item').forEach(item => {
                     geralCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
             } else {
-                // Mostrar apenas o card do sistema selecionado
+                // Mostrar o card do sistema selecionado e seus cards relacionados
                 const systemCard = document.getElementById(`${system}-card`);
+                const financeiroCard = document.getElementById(`${system}-financeiro-card`);
+                const contratosCard = document.getElementById(`${system}-contratos-card`);
+                
                 if (systemCard) {
                     systemCard.style.display = 'block';
                     systemCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+                
+                // Mostrar card de contratos apenas para Viva Saúde
+                if (contratosCard && system === 'viva-saude') {
+                    contratosCard.style.display = 'block';
+                } else if (contratosCard) {
+                    contratosCard.style.display = 'none';
+                }
+                
+                if (financeiroCard) {
+                    financeiroCard.style.display = 'block';
+                    
+                    // Se for Viva Saúde, buscar dados financeiros quando o card for exibido
+                    if (system === 'viva-saude') {
+                        fetchFinanceiroVivaSaude();
+                    }
                 }
             }
         }

@@ -3,6 +3,8 @@ const cors = require('cors');
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
+const http = require('http');
 require('dotenv').config();
 
 const app = express();
@@ -85,11 +87,11 @@ async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITT
         // Fazer login (mesma lógica do loginRHID)
         console.log(`[${systemName}] Acessando página de login...`);
         await page.goto('https://rhid.com.br/v2/#/login', {
-            waitUntil: 'networkidle2',
-            timeout: 30000
+            waitUntil: 'domcontentloaded',
+            timeout: 20000
         });
 
-        await delay(2000);
+        await delay(1000);
 
         // Preencher credenciais
         console.log(`[${systemName}] Preenchendo credenciais...`);
@@ -165,74 +167,185 @@ async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITT
         // Navegar para a página de listagem de pessoas
         console.log(`[${systemName}] Navegando para página de listagem de pessoas...`);
         await page.goto('https://rhid.com.br/v2/#/list/person', {
-            waitUntil: 'networkidle2',
-            timeout: 30000
+            waitUntil: 'domcontentloaded',
+            timeout: 20000
         });
 
-        // Aguardar página carregar
+        // Aguardar página carregar (reduzido)
         console.log(`[${systemName}] Aguardando página carregar...`);
-        await page.waitForFunction(() => {
-            return document.readyState === 'complete';
-        }, { timeout: 20000 });
-        
-        await delay(5000);
+        await delay(3000);
 
         // Clicar no botão de menu (três pontos)
         console.log(`[${systemName}] Procurando botão de menu...`);
-        await page.waitForSelector('.m-dropdown__toggle', { timeout: 15000 });
-        console.log(`[${systemName}] Botão de menu encontrado, clicando...`);
-        await page.click('.m-dropdown__toggle');
+        await page.waitForSelector('.m-dropdown__toggle', { timeout: 15000, visible: true });
+        console.log(`[${systemName}] Botão de menu encontrado, preparando para clicar...`);
+        
+        // Tentar clicar usando múltiplos métodos
+        let menuClicked = false;
+        try {
+            // Método 1: Scroll para o elemento e clicar
+            await page.evaluate(() => {
+                const menuBtn = document.querySelector('.m-dropdown__toggle');
+                if (menuBtn) {
+                    menuBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            });
+            await delay(500);
+            
+            // Método 2: Tentar clicar via Puppeteer
+            try {
+                await page.click('.m-dropdown__toggle', { timeout: 5000 });
+                menuClicked = true;
+                console.log(`[${systemName}] Botão de menu clicado via Puppeteer`);
+            } catch (e) {
+                console.log(`[${systemName}] Clique via Puppeteer falhou, tentando via evaluate...`);
+                // Método 3: Clicar diretamente no DOM
+                menuClicked = await page.evaluate(() => {
+                    const menuBtn = document.querySelector('.m-dropdown__toggle');
+                    if (menuBtn) {
+                        // Verificar se está visível
+                        const style = window.getComputedStyle(menuBtn);
+                        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                            return false;
+                        }
+                        // Tentar clicar
+                        menuBtn.click();
+                        return true;
+                    }
+                    return false;
+                });
+                
+                if (menuClicked) {
+                    console.log(`[${systemName}] Botão de menu clicado via evaluate`);
+                } else {
+                    throw new Error('Não foi possível clicar no botão de menu');
+                }
+            }
+        } catch (e) {
+            console.log(`[${systemName}] Erro ao clicar no menu: ${e.message}`);
+            throw new Error(`Erro ao clicar no botão de menu: ${e.message}`);
+        }
+        
         await delay(2000);
 
         // Clicar em "Exportar CSV" usando o seletor correto
         console.log(`[${systemName}] Procurando opção "Exportar CSV"...`);
+        let csvLinkClicked = false;
+        
         try {
             // Aguardar o dropdown aparecer
-            await page.waitForSelector('a[ng-click="exportCSV()"]', { timeout: 10000 });
-            console.log(`[${systemName}] Link "Exportar CSV" encontrado, clicando...`);
-            await page.click('a[ng-click="exportCSV()"]');
-            console.log(`[${systemName}] Link "Exportar CSV" clicado com sucesso`);
+            await page.waitForSelector('a[ng-click="exportCSV()"]', { timeout: 10000, visible: true });
+            console.log(`[${systemName}] Link "Exportar CSV" encontrado, preparando para clicar...`);
+            
+            // Tentar clicar via Puppeteer
+            try {
+                await page.evaluate(() => {
+                    const exportLink = document.querySelector('a[ng-click="exportCSV()"]');
+                    if (exportLink) {
+                        exportLink.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+                await delay(500);
+                
+                await page.click('a[ng-click="exportCSV()"]', { timeout: 5000 });
+                csvLinkClicked = true;
+                console.log(`[${systemName}] Link "Exportar CSV" clicado via Puppeteer`);
+            } catch (e) {
+                console.log(`[${systemName}] Clique via Puppeteer falhou, tentando via evaluate...`);
+                // Método alternativo: clicar diretamente no DOM
+                csvLinkClicked = await page.evaluate(() => {
+                    // Procurar link com ng-click="exportCSV()"
+                    const exportLink = document.querySelector('a[ng-click="exportCSV()"]');
+                    if (exportLink) {
+                        // Verificar se está visível
+                        const style = window.getComputedStyle(exportLink);
+                        if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+                            exportLink.click();
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+                
+                if (csvLinkClicked) {
+                    console.log(`[${systemName}] Link "Exportar CSV" clicado via evaluate`);
+                }
+            }
         } catch (e) {
             console.log(`[${systemName}] Tentando método alternativo para encontrar "Exportar CSV"...`);
-            // Método alternativo: procurar por texto
-            const csvLinkClicked = await page.evaluate(() => {
-                // Procurar link com ng-click="exportCSV()"
-                const exportLink = document.querySelector('a[ng-click="exportCSV()"]');
-                if (exportLink) {
-                    exportLink.click();
-                    return true;
-                }
-                
+        }
+        
+        // Se ainda não clicou, tentar método alternativo
+        if (!csvLinkClicked) {
+            csvLinkClicked = await page.evaluate(() => {
                 // Procurar por texto "Exportar CSV" dentro de links
-                const links = Array.from(document.querySelectorAll('a.m-nav__link'));
+                const links = Array.from(document.querySelectorAll('a.m-nav__link, a[ng-click*="export"], a[ng-click*="CSV"]'));
                 for (const link of links) {
-                    const span = link.querySelector('span.m-nav__link-text');
-                    if (span && span.textContent.trim().includes('Exportar CSV')) {
-                        link.click();
-                        return true;
+                    const text = link.textContent || link.innerText || '';
+                    if (text.toLowerCase().includes('exportar') && text.toLowerCase().includes('csv')) {
+                        const style = window.getComputedStyle(link);
+                        if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+                            link.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            link.click();
+                            return true;
+                        }
                     }
                 }
                 return false;
             });
 
-            if (!csvLinkClicked) {
-                throw new Error('Não foi possível encontrar o link "Exportar CSV"');
+            if (csvLinkClicked) {
+                console.log(`[${systemName}] Link "Exportar CSV" encontrado e clicado por texto`);
+            } else {
+                throw new Error('Não foi possível encontrar ou clicar no link "Exportar CSV"');
             }
         }
 
         console.log(`[${systemName}] Aguardando download do CSV...`);
+        
+        // Registrar timestamp antes do download para pegar apenas arquivos novos
+        const timestampAntesDownload = Date.now();
         await delay(5000);
 
-        // Procurar arquivo CSV baixado
+        // Procurar arquivo CSV baixado (mais recente criado após o início do processo)
         const files = fs.readdirSync(downloadsDir);
-        const csvFile = files.find(file => file.endsWith('.csv'));
+        console.log(`[${systemName}] Arquivos encontrados no diretório de downloads: ${files.length}`);
         
-        if (!csvFile) {
-            throw new Error('Arquivo CSV não foi baixado');
+        const csvFiles = files
+            .filter(file => file.endsWith('.csv'))
+            .map(file => {
+                const filePath = path.join(downloadsDir, file);
+                const stats = fs.statSync(filePath);
+                return {
+                    name: file,
+                    path: filePath,
+                    mtime: stats.mtime.getTime(),
+                    birthtime: stats.birthtime.getTime()
+                };
+            })
+            .filter(file => {
+                // Arquivos criados/modificados após o início do processo (com margem de 5s antes)
+                const isRecent = file.mtime >= timestampAntesDownload - 5000;
+                if (!isRecent) {
+                    console.log(`[${systemName}] Arquivo ${file.name} ignorado (muito antigo: ${new Date(file.mtime).toLocaleString('pt-BR')})`);
+                }
+                return isRecent;
+            })
+            .sort((a, b) => b.mtime - a.mtime); // Ordenar por mais recente
+        
+        console.log(`[${systemName}] Arquivos CSV recentes encontrados: ${csvFiles.length}`);
+        csvFiles.forEach((file, index) => {
+            console.log(`[${systemName}]   ${index + 1}. ${file.name} - ${new Date(file.mtime).toLocaleString('pt-BR')}`);
+        });
+        
+        if (csvFiles.length === 0) {
+            throw new Error(`Arquivo CSV não foi baixado para ${systemName}. Verifique se o download foi concluído.`);
         }
 
-        const csvPath = path.join(downloadsDir, csvFile);
-        console.log(`[${systemName}] Arquivo CSV encontrado: ${csvFile}`);
+        // Pegar o arquivo mais recente
+        const csvFile = csvFiles[0];
+        const csvPath = csvFile.path;
+        console.log(`[${systemName}] ✅ Usando arquivo CSV: ${csvFile.name} (modificado em ${new Date(csvFile.mtime).toLocaleString('pt-BR')})`);
 
         // Ler e processar CSV
         const csvContent = fs.readFileSync(csvPath, 'utf-8');
@@ -559,13 +672,13 @@ async function loginRHID(username, password) {
         try {
             // Aguardar navegação ou mudança de URL
             await Promise.race([
-                page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }),
-                page.waitForFunction(() => !window.location.href.includes('login'), { timeout: 15000 })
+                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }),
+                page.waitForFunction(() => !window.location.href.includes('login'), { timeout: 10000 })
             ]);
         } catch (e) {
             // Se não houver navegação, aguardar um pouco para o JavaScript processar
             console.log('Aguardando processamento do login...');
-            await delay(5000);
+            await delay(2000);
         }
 
         // Verificar se login foi bem-sucedido
@@ -607,8 +720,8 @@ async function loginRHID(username, password) {
         console.log('[RHID] Navegando para página de listagem de pessoas...');
         try {
             await page.goto('https://rhid.com.br/v2/#/list/person', {
-                waitUntil: 'networkidle2',
-                timeout: 30000
+                waitUntil: 'domcontentloaded',
+                timeout: 20000
             });
             console.log('Navegação para /list/person concluída');
         } catch (e) {
@@ -617,7 +730,7 @@ async function loginRHID(username, password) {
             await page.evaluate(() => {
                 window.location.hash = '#/list/person';
             });
-            await delay(3000);
+            await delay(2000);
         }
 
         // Obter cookies da sessão
@@ -654,18 +767,13 @@ async function fetchPersonList(cookies) {
         console.log('Acessando página de listagem de pessoas...');
         // Acessar página de listagem de pessoas
         await page.goto('https://rhid.com.br/v2/#/list/person', {
-            waitUntil: 'networkidle2',
-            timeout: 30000
+            waitUntil: 'domcontentloaded',
+            timeout: 20000
         });
 
-        // Aguardar página carregar completamente
+        // Aguardar um pouco para o Angular renderizar (reduzido)
         console.log('Aguardando página carregar completamente...');
-        await page.waitForFunction(() => {
-            return document.readyState === 'complete';
-        }, { timeout: 15000 });
-        
-        // Aguardar um pouco mais para o Angular renderizar
-        await delay(5000);
+        await delay(3000);
         
         // Aguardar tabela aparecer
         console.log('Aguardando tabela #mydatatable aparecer...');
@@ -854,11 +962,11 @@ async function loginDoctorID(username, password) {
         // Acessar página de login do website
         console.log('[DOCTORID] Acessando página de login (website)...');
         await page.goto('https://www.doctorid.com.br/website', {
-            waitUntil: 'networkidle2',
-            timeout: 30000
+            waitUntil: 'domcontentloaded',
+            timeout: 20000
         });
 
-        await delay(3000);
+        await delay(1000);
 
         // Preencher credenciais usando os campos específicos
         console.log('[DOCTORID] Preenchendo credenciais...');
@@ -882,7 +990,7 @@ async function loginDoctorID(username, password) {
             }
         }, username, password);
 
-        await delay(1000);
+        await delay(500);
 
         // Clicar no botão de login
         console.log('[DOCTORID] Clicando no botão de login...');
@@ -920,7 +1028,11 @@ async function loginDoctorID(username, password) {
 
         // Aguardar processamento do login
         console.log('[DOCTORID] Aguardando processamento do login...');
-        await delay(5000);
+        try {
+            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 });
+        } catch (e) {
+            await delay(2000);
+        }
 
         // Verificar se login foi bem-sucedido
         const currentUrl = page.url();
@@ -943,8 +1055,8 @@ async function loginDoctorID(username, password) {
         console.log('[DOCTORID] Navegando para página personGroupCompany...');
         try {
             await page.goto('https://www.doctorid.com.br/#personGroupCompany', {
-                waitUntil: 'networkidle2',
-                timeout: 30000
+                waitUntil: 'domcontentloaded',
+                timeout: 20000
             });
             console.log('[DOCTORID] Navegação para /#personGroupCompany concluída');
         } catch (e) {
@@ -952,18 +1064,12 @@ async function loginDoctorID(username, password) {
             await page.evaluate(() => {
                 window.location.hash = '#personGroupCompany';
             });
-            await delay(5000);
+            await delay(2000);
         }
 
-        // Aguardar página carregar completamente
-        console.log('[DOCTORID] Aguardando página carregar...');
-        await page.waitForFunction(() => {
-            return document.readyState === 'complete';
-        }, { timeout: 20000 });
-        
-        // Aguardar JavaScript/Angular renderizar
+        // Aguardar JavaScript/Angular renderizar (reduzido)
         console.log('[DOCTORID] Aguardando JavaScript/Angular renderizar...');
-        await delay(5000);
+        await delay(3000);
         
         // Procurar e clicar no link "Filtro Avançado"
         console.log('[DOCTORID] Procurando link "Filtro Avançado"...');
@@ -990,13 +1096,13 @@ async function loginDoctorID(username, password) {
         }
 
         console.log('[DOCTORID] ✅ Link "Filtro Avançado" clicado com sucesso');
-        await delay(3000);
+        await delay(1000);
         
         // Aguardar elemento filtroComplexo_selecionar aparecer
         console.log('[DOCTORID] Aguardando elemento filtroComplexo_selecionar aparecer...');
-        await page.waitForSelector('.filtroComplexo_selecionar', { timeout: 15000, visible: true });
+        await page.waitForSelector('.filtroComplexo_selecionar', { timeout: 10000, visible: true });
         console.log('[DOCTORID] ✅ Elemento filtroComplexo_selecionar encontrado');
-        await delay(2000);
+        await delay(1000);
         
         // Identificar o select dentro do filtroComplexo_selecionar
         console.log('[DOCTORID] Identificando select de tipo de filtro...');
@@ -1101,7 +1207,7 @@ async function loginDoctorID(username, password) {
         }
         
         console.log(`[DOCTORID] ✅ "Percentual do perfil" selecionado: "${selecaoResultado.texto}" (valor: ${selecaoResultado.valor})`);
-        await delay(2000);
+        await delay(1000);
         
         // Verificar se o Select2 visual foi atualizado
         const select2Atualizado = await page.evaluate(() => {
@@ -1129,7 +1235,7 @@ async function loginDoctorID(username, password) {
         
         // Aguardar o select de operadores aparecer após selecionar o tipo de filtro
         console.log('[DOCTORID] Aguardando select de operadores aparecer...');
-        await delay(2000);
+        await delay(1000);
         
         // Identificar o select de operadores
         console.log('[DOCTORID] Identificando select de operadores...');
@@ -1335,13 +1441,13 @@ async function loginDoctorID(username, password) {
         }
         
         console.log(`[DOCTORID] ✅ Campo preenchido com: "${inputPreenchido.valor}"`);
-        await delay(500);
+        await delay(300);
         
         // Pressionar Enter no campo de input
         console.log('[DOCTORID] Pressionando Enter no campo de input...');
         await page.keyboard.press('Enter');
         console.log('[DOCTORID] ✅ Enter pressionado');
-        await delay(2000);
+        await delay(1000);
         
         // Verificar se o valor foi mantido após pressionar Enter
         const valorVerificado = await page.evaluate(() => {
@@ -1368,18 +1474,14 @@ async function loginDoctorID(username, password) {
         
         // Aguardar processamento após pressionar Enter
         console.log('[DOCTORID] Aguardando processamento após pressionar Enter...');
-        await delay(5000);
-        
-        // Aguardar a página carregar completamente
         try {
-            await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 });
+            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
             console.log('[DOCTORID] ✅ Página carregada após filtrar');
         } catch (e) {
-            console.log('[DOCTORID] ⚠️ Timeout aguardando navegação, continuando...');
-            await delay(3000);
+            await delay(2000);
         }
         
-        // Aguardar o elemento de alerta aparecer
+        // Aguardar o elemento de alerta aparecer (com timeout reduzido)
         console.log('[DOCTORID] Aguardando elemento de alerta aparecer...');
         let alertaEncontrado = false;
         let registrosEncontrados = 0;
@@ -1388,14 +1490,14 @@ async function loginDoctorID(username, password) {
         // Tentar aguardar pelo elemento de alerta
         try {
             await page.waitForSelector('.alert.alert-dismissible.hidden-print.alert-info[role="alert"]', { 
-                timeout: 15000, 
+                timeout: 10000, 
                 visible: true 
             });
             alertaEncontrado = true;
             console.log('[DOCTORID] ✅ Elemento de alerta encontrado');
         } catch (e) {
             console.log('[DOCTORID] ⚠️ Elemento de alerta não apareceu imediatamente, tentando aguardar mais...');
-            await delay(5000);
+            await delay(3000);
         }
         
         // Extrair o número de registros do alerta
@@ -1505,6 +1607,514 @@ async function loginDoctorID(username, password) {
     }
 }
 
+
+// Função para extrair dados financeiros do Google Sheets
+async function fetchGoogleSheetsFinanceiro() {
+    let browser = null;
+    try {
+        const viewUrl = 'https://docs.google.com/spreadsheets/d/10vaVp0DcgOfjWW3_vat7M8mRVvMiBdtU9kAlDmjEioc/edit?usp=sharing';
+        const spreadsheetId = '10vaVp0DcgOfjWW3_vat7M8mRVvMiBdtU9kAlDmjEioc';
+        
+        console.log('[GOOGLE SHEETS] Acessando planilha financeira...');
+        console.log(`[GOOGLE SHEETS] URL: ${viewUrl}`);
+        
+        // Usar Puppeteer para acessar a planilha
+        browser = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+        
+        const page = await browser.newPage();
+        
+        // Primeiro, acessar a página de visualização para carregar a planilha
+        console.log('[GOOGLE SHEETS] Carregando página da planilha...');
+        await page.goto(viewUrl, {
+            waitUntil: 'networkidle2',
+            timeout: 30000
+        });
+        
+        // Aguardar a planilha carregar completamente
+        console.log('[GOOGLE SHEETS] Aguardando planilha renderizar...');
+        await delay(5000);
+        
+        // Primeiro, identificar a aba "RELATÓRIO CYLLA" e obter seu gid
+        console.log('[GOOGLE SHEETS] Procurando aba "RELATÓRIO CYLLA"...');
+        const abaInfo = await page.evaluate(() => {
+            const result = {
+                encontrada: false,
+                gid: null,
+                nome: null
+            };
+            
+            // Procurar pela aba "RELATÓRIO CYLLA"
+            // Google Sheets usa diferentes seletores para abas
+            const abaSelectors = [
+                '[data-sheet-name="RELATÓRIO CYLLA"]',
+                '[aria-label*="RELATÓRIO CYLLA"]',
+                'button[aria-label*="RELATÓRIO CYLLA"]',
+                '.docs-sheet-tab[aria-label*="RELATÓRIO CYLLA"]'
+            ];
+            
+            let abaElement = null;
+            for (const selector of abaSelectors) {
+                abaElement = document.querySelector(selector);
+                if (abaElement) break;
+            }
+            
+            // Se não encontrou por seletor, procurar por texto
+            if (!abaElement) {
+                const allTabs = document.querySelectorAll('[role="tab"], .docs-sheet-tab, button[data-sheet-name]');
+                for (const tab of allTabs) {
+                    const text = tab.textContent || tab.innerText || tab.getAttribute('aria-label') || '';
+                    if (text.includes('RELATÓRIO CYLLA') || text.includes('CYLLA')) {
+                        abaElement = tab;
+                        break;
+                    }
+                }
+            }
+            
+            if (abaElement) {
+                result.encontrada = true;
+                result.nome = abaElement.textContent || abaElement.innerText || 'RELATÓRIO CYLLA';
+                
+                // Tentar obter o gid da aba
+                const gid = abaElement.getAttribute('data-sheet-id') || 
+                           abaElement.getAttribute('data-gid') ||
+                           abaElement.getAttribute('id')?.match(/gid[=:](\d+)/)?.[1];
+                
+                if (gid) {
+                    result.gid = gid;
+                } else {
+                    // Tentar extrair do href ou onclick
+                    const href = abaElement.getAttribute('href') || '';
+                    const gidMatch = href.match(/[#&]gid=(\d+)/);
+                    if (gidMatch) {
+                        result.gid = gidMatch[1];
+                    }
+                }
+            }
+            
+            return result;
+        });
+        
+        console.log(`[GOOGLE SHEETS] Aba encontrada: ${abaInfo.encontrada}, GID: ${abaInfo.gid || 'não encontrado'}`);
+        
+        // Se encontrou a aba, clicar nela para ativar
+        if (abaInfo.encontrada) {
+            console.log('[GOOGLE SHEETS] Ativando aba "RELATÓRIO CYLLA"...');
+            await page.evaluate(() => {
+                const abaSelectors = [
+                    '[data-sheet-name="RELATÓRIO CYLLA"]',
+                    '[aria-label*="RELATÓRIO CYLLA"]',
+                    'button[aria-label*="RELATÓRIO CYLLA"]'
+                ];
+                
+                let abaElement = null;
+                for (const selector of abaSelectors) {
+                    abaElement = document.querySelector(selector);
+                    if (abaElement) break;
+                }
+                
+                if (!abaElement) {
+                    const allTabs = document.querySelectorAll('[role="tab"], .docs-sheet-tab, button[data-sheet-name]');
+                    for (const tab of allTabs) {
+                        const text = tab.textContent || tab.innerText || '';
+                        if (text.includes('RELATÓRIO CYLLA') || text.includes('CYLLA')) {
+                            abaElement = tab;
+                            break;
+                        }
+                    }
+                }
+                
+                if (abaElement) {
+                    abaElement.click();
+                    return true;
+                }
+                return false;
+            });
+            
+            await delay(3000); // Aguardar aba carregar
+        }
+        
+        // Tentar extrair dados diretamente da página HTML do Google Sheets (intervalo A2:H37)
+        console.log('[GOOGLE SHEETS] Extraindo dados do intervalo A2:H37 da aba "RELATÓRIO CYLLA"...');
+        const planilhaData = await page.evaluate(() => {
+            const result = {
+                headers: [],
+                rows: [],
+                rawText: ''
+            };
+            
+            // Função para converter letra de coluna para número (A=0, B=1, ..., H=7)
+            function colLetterToNumber(letter) {
+                return letter.charCodeAt(0) - 65; // A=65 em ASCII
+            }
+            
+            // Intervalo desejado: A2:H37 (linhas 2-37, colunas A-H)
+            const startRow = 2;
+            const endRow = 37;
+            const startCol = 0; // A
+            const endCol = 7;   // H
+            
+            // Tentar encontrar células da planilha do Google Sheets
+            // Google Sheets usa diferentes seletores dependendo da versão
+            const allCells = document.querySelectorAll('[role="gridcell"], [data-row], [data-col], .s0, .s1, .s2, .grid-cell');
+            
+            console.log(`[GOOGLE SHEETS-BROWSER] Total de células encontradas: ${allCells.length}`);
+            
+            if (allCells.length > 0) {
+                // Mapear células por posição (row, col)
+                const cellsMap = new Map();
+                
+                allCells.forEach(cell => {
+                    // Tentar diferentes métodos para obter posição
+                    let row = null;
+                    let col = null;
+                    
+                    // Método 1: Atributos data-row e data-col
+                    const dataRow = cell.getAttribute('data-row');
+                    const dataCol = cell.getAttribute('data-col');
+                    
+                    if (dataRow !== null && dataCol !== null) {
+                        row = parseInt(dataRow);
+                        col = parseInt(dataCol);
+                    } else {
+                        // Método 2: Procurar no elemento pai
+                        const parent = cell.closest('[data-row]');
+                        if (parent) {
+                            row = parseInt(parent.getAttribute('data-row') || '0');
+                            col = parseInt(parent.getAttribute('data-col') || '0');
+                        }
+                    }
+                    
+                    // Método 3: Tentar extrair da classe ou ID
+                    if (row === null || col === null) {
+                        const classMatch = cell.className.match(/r(\d+)c(\d+)/);
+                        if (classMatch) {
+                            row = parseInt(classMatch[1]);
+                            col = parseInt(classMatch[2]) - 1; // Google Sheets usa 1-indexed
+                        }
+                    }
+                    
+                    if (row !== null && col !== null) {
+                        const text = cell.textContent?.trim() || cell.innerText?.trim() || '';
+                        const key = `${row}-${col}`;
+                        if (!cellsMap.has(key)) {
+                            cellsMap.set(key, { row, col, text });
+                        }
+                    }
+                });
+                
+                console.log(`[GOOGLE SHEETS-BROWSER] Células mapeadas: ${cellsMap.size}`);
+                
+                // Extrair dados do intervalo A2:H37
+                const rowsMap = new Map();
+                
+                for (let r = startRow; r <= endRow; r++) {
+                    const rowData = [];
+                    for (let c = startCol; c <= endCol; c++) {
+                        const key = `${r}-${c}`;
+                        const cell = cellsMap.get(key);
+                        rowData.push(cell ? cell.text : '');
+                    }
+                    
+                    // Só adicionar linha se tiver algum conteúdo
+                    if (rowData.some(cell => cell.trim() !== '')) {
+                        rowsMap.set(r, rowData);
+                    }
+                }
+                
+                // Converter para arrays ordenados
+                const sortedRows = Array.from(rowsMap.entries()).sort((a, b) => a[0] - b[0]);
+                
+                // Primeira linha (A2) pode ser cabeçalho, resto são dados
+                if (sortedRows.length > 0) {
+                    result.headers = sortedRows[0][1]; // Linha 2 como cabeçalho
+                    for (let i = 1; i < sortedRows.length; i++) {
+                        result.rows.push(sortedRows[i][1]);
+                    }
+                }
+            }
+            
+            // Se não encontrou células estruturadas, tentar método alternativo
+            if (result.headers.length === 0) {
+                console.log('[GOOGLE SHEETS-BROWSER] Método 1 falhou, tentando método alternativo...');
+                
+                // Método alternativo: procurar por tabelas ou elementos de planilha
+                const tables = document.querySelectorAll('table, [role="table"], [role="grid"]');
+                if (tables.length > 0) {
+                    const table = tables[0];
+                    const allRows = table.querySelectorAll('tr, [role="row"]');
+                    
+                    // Pular primeira linha (linha 1), começar da linha 2 (A2)
+                    for (let i = 1; i < allRows.length && i <= endRow; i++) {
+                        const row = allRows[i];
+                        const cells = row.querySelectorAll('td, th, [role="gridcell"]');
+                        const rowData = [];
+                        
+                        // Extrair apenas colunas A-H (índices 0-7)
+                        for (let j = 0; j <= endCol && j < cells.length; j++) {
+                            rowData.push(cells[j]?.textContent?.trim() || '');
+                        }
+                        
+                        if (rowData.length > 0 && rowData.some(cell => cell !== '')) {
+                            if (i === 1) {
+                                result.headers = rowData;
+                            } else {
+                                result.rows.push(rowData);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return result;
+        });
+        
+        console.log(`[GOOGLE SHEETS] Dados extraídos do intervalo A2:H37: ${planilhaData.headers.length} colunas, ${planilhaData.rows.length} linhas`);
+        
+        // Validar que extraiu dados do intervalo correto (A-H = 8 colunas)
+        if (planilhaData.headers.length > 0 && planilhaData.headers.length !== 8) {
+            console.log(`[GOOGLE SHEETS] ⚠️ Aviso: Esperado 8 colunas (A-H), encontrado ${planilhaData.headers.length}`);
+        }
+        
+        let csvText = '';
+        
+        // Se conseguiu extrair dados estruturados
+        if (planilhaData.headers.length > 0) {
+            // Garantir que temos exatamente 8 colunas (A-H)
+            const headers = planilhaData.headers.slice(0, 8);
+            csvText = headers.join(',') + '\n';
+            
+            planilhaData.rows.forEach(row => {
+                // Garantir que cada linha tem no máximo 8 colunas (A-H)
+                const rowData = row.slice(0, 8);
+                // Preencher com strings vazias se faltar colunas
+                while (rowData.length < 8) {
+                    rowData.push('');
+                }
+                csvText += rowData.join(',') + '\n';
+            });
+            
+            console.log(`[GOOGLE SHEETS] ✅ Dados do intervalo A2:H37 convertidos para CSV (${planilhaData.rows.length} linhas de dados)`);
+        } else if (planilhaData.rawText) {
+            // Tentar usar o texto bruto como CSV e processar apenas A2:H37
+            console.log('[GOOGLE SHEETS] Processando texto bruto e extraindo intervalo A2:H37...');
+            const lines = planilhaData.rawText.split('\n').filter(line => line.trim());
+            if (lines.length >= 2) {
+                // Pular linha 1, começar da linha 2 (A2)
+                // Processar até linha 37
+                const dataLines = lines.slice(1, 38); // linhas 2-37 (índices 1-37)
+                csvText = dataLines.join('\n');
+                console.log(`[GOOGLE SHEETS] Extraídas ${dataLines.length} linhas do texto bruto`);
+            } else {
+                csvText = planilhaData.rawText;
+            }
+        } else {
+            // Se não conseguiu extrair, tentar baixar CSV diretamente e processar intervalo
+            console.log('[GOOGLE SHEETS] Tentando baixar CSV diretamente da aba "RELATÓRIO CYLLA"...');
+            
+            // Usar o gid da aba encontrada, ou tentar sem gid (pega a primeira aba ativa)
+            const gidToUse = abaInfo.gid || '0';
+            const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gidToUse}`;
+            console.log(`[GOOGLE SHEETS] URL do CSV: ${csvUrl}`);
+            
+            const response = await page.goto(csvUrl, {
+                waitUntil: 'networkidle2',
+                timeout: 30000
+            });
+            
+            if (response && response.ok()) {
+                const fullCsv = await page.evaluate(() => {
+                    return document.body.innerText || document.body.textContent || '';
+                });
+                
+                // Processar CSV completo e extrair apenas A2:H37
+                const allLines = fullCsv.split('\n').filter(line => line.trim());
+                if (allLines.length >= 2) {
+                    // Linha 2 é o cabeçalho, linhas 3-37 são os dados
+                    const headerLine = allLines[1]; // Linha 2 (índice 1)
+                    const dataLines = allLines.slice(2, 38); // Linhas 3-37 (índices 2-37)
+                    
+                    // Extrair apenas colunas A-H (primeiras 8 colunas)
+                    const headerCols = headerLine.split(',').slice(0, 8);
+                    csvText = headerCols.join(',') + '\n';
+                    
+                    dataLines.forEach(line => {
+                        const cols = line.split(',').slice(0, 8);
+                        while (cols.length < 8) cols.push('');
+                        csvText += cols.join(',') + '\n';
+                    });
+                    
+                    console.log(`[GOOGLE SHEETS] ✅ Intervalo A2:H37 extraído do CSV completo (${dataLines.length} linhas)`);
+                } else {
+                    csvText = fullCsv;
+                }
+            } else {
+                throw new Error(`Não foi possível acessar CSV: status ${response?.status() || 'Sem resposta'}`);
+            }
+        }
+        
+        await browser.close();
+        browser = null;
+        
+        if (!csvText || csvText.trim().length === 0) {
+            throw new Error('Planilha retornou conteúdo vazio');
+        }
+        
+        console.log('[GOOGLE SHEETS] Dados obtidos, processando...');
+        
+        // Processar CSV
+        const lines = csvText.split('\n').filter(line => line.trim());
+        if (lines.length === 0) {
+            throw new Error('Planilha está vazia');
+        }
+        
+        // Função para parsear CSV
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+        
+        // Parsear cabeçalhos
+        const headers = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, ''));
+        
+        // Parsear dados
+        const data = [];
+        for (let i = 1; i < lines.length; i++) {
+            const values = parseCSVLine(lines[i]).map(v => v.replace(/^"|"$/g, ''));
+            if (values.length === 0 || values.every(v => !v)) continue;
+            
+            const rowData = {};
+            headers.forEach((header, index) => {
+                rowData[header] = values[index] || '';
+            });
+            data.push(rowData);
+        }
+        
+        console.log(`[GOOGLE SHEETS] ✅ Dados processados: ${data.length} linhas, ${headers.length} colunas`);
+        console.log(`[GOOGLE SHEETS] Cabeçalhos: ${headers.join(', ')}`);
+        
+        // Identificar colunas financeiras (procurar por padrões comuns)
+        const valorColumns = headers.filter(h => {
+            const lower = h.toLowerCase();
+            return lower.includes('valor') || 
+                   lower.includes('total') || 
+                   lower.includes('financeiro') ||
+                   lower.includes('receita') ||
+                   lower.includes('faturamento') ||
+                   lower.includes('saldo') ||
+                   lower.includes('montante') ||
+                   lower.includes('quantia');
+        });
+        
+        console.log(`[GOOGLE SHEETS] Colunas financeiras identificadas: ${valorColumns.join(', ') || 'Nenhuma'}`);
+        
+        // Calcular valor total
+        let valorTotal = 0;
+        const valoresPorLinha = [];
+        
+        data.forEach((row, index) => {
+            let linhaTotal = 0;
+            
+            // Se encontrou colunas específicas, usar elas
+            if (valorColumns.length > 0) {
+                valorColumns.forEach(col => {
+                    const value = row[col];
+                    if (value) {
+                        const numValue = parseFloat(
+                            value.toString()
+                                .replace(/[^\d,.-]/g, '')
+                                .replace(',', '.')
+                        );
+                        if (!isNaN(numValue)) {
+                            linhaTotal += numValue;
+                        }
+                    }
+                });
+            } else {
+                // Se não encontrou colunas específicas, tentar todas as colunas numéricas
+                headers.forEach(header => {
+                    const value = row[header];
+                    if (value) {
+                        // Tentar identificar se é um valor monetário
+                        const strValue = value.toString();
+                        if (strValue.match(/[\d.,]+/) && (strValue.includes('R$') || strValue.includes(',') || strValue.includes('.'))) {
+                            const numValue = parseFloat(
+                                strValue
+                                    .replace(/[^\d,.-]/g, '')
+                                    .replace(',', '.')
+                            );
+                            if (!isNaN(numValue) && numValue > 0) {
+                                linhaTotal += numValue;
+                            }
+                        }
+                    }
+                });
+            }
+            
+            if (linhaTotal > 0) {
+                valoresPorLinha.push({ linha: index + 2, valor: linhaTotal });
+                valorTotal += linhaTotal;
+            }
+        });
+        
+        console.log(`[GOOGLE SHEETS] Valor total calculado: R$ ${valorTotal.toFixed(2)}`);
+        console.log(`[GOOGLE SHEETS] Linhas com valores: ${valoresPorLinha.length}`);
+        
+        return {
+            success: true,
+            data: data,
+            headers: headers,
+            totalRows: data.length,
+            valorTotal: valorTotal,
+            valorColumns: valorColumns,
+            valoresPorLinha: valoresPorLinha,
+            lastUpdate: new Date().toISOString()
+        };
+        
+    } catch (error) {
+        if (browser) {
+            await browser.close();
+        }
+        console.error('[GOOGLE SHEETS] Erro:', error);
+        return {
+            success: false,
+            error: error.message,
+            data: null
+        };
+    }
+}
+
+// Rota para buscar dados financeiros do Google Sheets
+app.get('/api/financeiro/viva-saude', async (req, res) => {
+    try {
+        const result = await fetchGoogleSheetsFinanceiro();
+        res.json(result);
+    } catch (error) {
+        console.error('Erro ao buscar dados financeiros:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erro ao buscar dados financeiros',
+            message: error.message
+        });
+    }
+});
 
 // Rota para verificar login de um sistema específico
 app.post('/api/check-login/:system', async (req, res) => {
