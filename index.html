@@ -152,38 +152,31 @@
                                 <div class="stat-value-large" id="viva-saude-registros">-</div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Área Contratos Ativos - Viva Saúde -->
-                <div class="system-card" id="viva-saude-contratos-card" style="margin-top: 20px;">
-                    <div class="card-header-modern">
-                        <div class="card-title-section">
-                            <h2 class="card-title-modern">Contratos Ativos</h2>
-                        </div>
-                    </div>
-
-                    <div class="card-body">
-                        <div style="display: flex; flex-wrap: wrap; gap: 12px;">
-                            <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
-                                <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
-                                <span style="font-size: 13px;">UPAS</span>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
-                                <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
-                                <span style="font-size: 13px;">EVOLUIR</span>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
-                                <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
-                                <span style="font-size: 13px;">CPSS</span>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
-                                <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
-                                <span style="font-size: 13px;">CRATEÚS</span>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
-                                <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
-                                <span style="font-size: 13px;">ITAPIPOCA</span>
+                        <!-- Contratos Ativos - Viva Saúde -->
+                        <div id="viva-saude-contratos-card" style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+                            <h3 style="font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 15px;">Contratos Ativos</h3>
+                            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                                <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
+                                    <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
+                                    <span style="font-size: 13px;">UPAS</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
+                                    <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
+                                    <span style="font-size: 13px;">EVOLUIR</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
+                                    <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
+                                    <span style="font-size: 13px;">CPSS</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
+                                    <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
+                                    <span style="font-size: 13px;">CRATEÚS</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
+                                    <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block;"></span>
+                                    <span style="font-size: 13px;">ITAPIPOCA</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -216,6 +209,11 @@
                                 <div class="stat-label">Status</div>
                                 <div class="stat-value" id="viva-saude-financeiro-status">Aguardando...</div>
                             </div>
+                        </div>
+                        
+                        <!-- Detalhes dos Meses (UPAs, Valores, Datas, Situações) -->
+                        <div id="viva-saude-financeiro-detalhes-meses" style="margin-top: 20px;">
+                            <!-- Será preenchido dinamicamente com dados detalhados por mês -->
                         </div>
                         
                         <!-- Valores Extraídos do CSV -->

@@ -36,56 +36,307 @@ async function fetchFinanceiroVivaSaude() {
             const updateEl = document.getElementById('viva-saude-financeiro-update');
             const statusEl = document.getElementById('viva-saude-financeiro-status');
             
+            // Exibir detalhes dos meses (UPAs, Valores, Datas, Situações)
+            if (data.valores && data.valores.meses) {
+                const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
+                if (detalhesMesesContainer && Object.keys(data.valores.meses).length > 0) {
+                    let htmlDetalhes = '<div style="margin-bottom: 30px;">';
+                    htmlDetalhes += '<h3 style="font-size: 18px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 20px; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 10px;">Detalhes por Mês</h3>';
+                    
+                    // Ordenar meses (Janeiro a Dezembro)
+                    const ordemMeses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 
+                                       'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+                    const mesesOrdenados = Object.keys(data.valores.meses).sort((a, b) => {
+                        return ordemMeses.indexOf(a) - ordemMeses.indexOf(b);
+                    });
+                    
+                    mesesOrdenados.forEach(mesNome => {
+                        const mesData = data.valores.meses[mesNome];
+                        
+                        // Filtrar valores que são cabeçalhos ou vazios
+                        const valoresValidos = (mesData.valores_recebidos || []).filter(item => {
+                            const valor = item.valor ? item.valor.trim().toUpperCase() : '';
+                            return valor && valor !== '' && valor !== 'VALOR RECEDIDO' && valor !== 'VALOR RECEBIDO';
+                        });
+                        
+                        const datasValidas = (mesData.datas || []).filter(item => {
+                            const data = item.data ? item.data.trim().toUpperCase() : '';
+                            return data && data !== '' && data !== 'DATA';
+                        });
+                        
+                        const situacoesValidas = (mesData.situacoes || []).filter(item => {
+                            if (!item.situacao) return false;
+                            const situacao = item.situacao.trim();
+                            if (!situacao || situacao === '') return false;
+                            
+                            // Remover apenas "SITUAO" (com encoding incorreto)
+                            // Verificar se contém caracteres de encoding incorreto e se é exatamente "SITUAO"
+                            if (situacao.includes('') || situacao.includes('')) {
+                                // Verificar se é exatamente "SITUAO" (sem acento, com encoding incorreto)
+                                const situacaoUpper = situacao.toUpperCase();
+                                // Normalizar removendo caracteres especiais para comparação
+                                const situacaoNormalizada = situacaoUpper.replace(/[^A-Z0-9]/g, '');
+                                if (situacaoNormalizada === 'SITUAO' || situacaoNormalizada === 'SITUACAO') {
+                                    return false; // Remover apenas "SITUAO" com encoding incorreto
+                                }
+                                // Se contém caracteres especiais mas não é "SITUAO", manter (pode ser outro valor válido)
+                            }
+                            
+                            return true;
+                        });
+                        
+                        const upasValidas = (mesData.upas || []).filter(upa => {
+                            return upa && upa.trim() !== '';
+                        });
+                        
+                        // Determinar número máximo de linhas
+                        const maxLinhas = Math.max(
+                            valoresValidos.length,
+                            datasValidas.length,
+                            situacoesValidas.length,
+                            upasValidas.length
+                        );
+                        
+                        if (maxLinhas > 0) {
+                            htmlDetalhes += `
+                                <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
+                                    <div style="font-size: 20px; font-weight: 700; color: #3b82f6; margin-bottom: 20px; text-transform: capitalize;">
+                                        ${mesNome.charAt(0) + mesNome.slice(1).toLowerCase()}
+                                    </div>
+                                    
+                                    <div style="overflow-x: auto;">
+                                        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                                            <thead>
+                                                <tr style="background: rgba(255,255,255,0.1); border-bottom: 2px solid rgba(255,255,255,0.2);">
+                                                    <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">UPA</th>
+                                                    <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">Valor Recebido</th>
+                                                    <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">Data</th>
+                                                    <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600;">Situação</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                            `;
+                            
+                            // Criar linhas da tabela
+                            for (let i = 0; i < maxLinhas; i++) {
+                                const upa = upasValidas[i] || '';
+                                const valor = valoresValidos[i] ? valoresValidos[i].valor : '';
+                                const data = datasValidas[i] ? datasValidas[i].data : '';
+                                let situacao = situacoesValidas[i] ? situacoesValidas[i].situacao.trim() : '';
+                                
+                                // Verificação final: remover apenas "SITUAO" com encoding incorreto
+                                if (situacao) {
+                                    // Verificar se contém caracteres de encoding incorreto
+                                    if (situacao.includes('') || situacao.includes('')) {
+                                        // Verificar se é exatamente "SITUAO" (sem acento, com encoding incorreto)
+                                        const situacaoUpper = situacao.toUpperCase();
+                                        const situacaoNormalizada = situacaoUpper.replace(/[^A-Z0-9]/g, '');
+                                        if (situacaoNormalizada === 'SITUAO' || situacaoNormalizada === 'SITUACAO') {
+                                            situacao = ''; // Remover apenas "SITUAO" com encoding incorreto
+                                        }
+                                        // Se contém caracteres especiais mas não é "SITUAO", manter (pode ser outro valor válido)
+                                    }
+                                }
+                                
+                                // Determinar cor da situação
+                                let corSituacao = '#f59e0b'; // Amarelo padrão
+                                if (situacao) {
+                                    const situacaoUpper = situacao.toUpperCase();
+                                    if (situacaoUpper.includes('PAGO') || situacaoUpper.includes('OK') || situacaoUpper.includes('CONCLUÍDO')) {
+                                        corSituacao = '#10b981'; // Verde
+                                    } else if (situacaoUpper.includes('PENDENTE') || situacaoUpper.includes('AGUARDANDO')) {
+                                        corSituacao = '#f59e0b'; // Amarelo
+                                    } else if (situacaoUpper.includes('CANCELADO') || situacaoUpper.includes('ERRO')) {
+                                        corSituacao = '#ef4444'; // Vermelho
+                                    }
+                                }
+                                
+                                htmlDetalhes += `
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); ${i % 2 === 0 ? 'background: rgba(255,255,255,0.02);' : ''}">
+                                        <td style="padding: 12px; color: rgba(255,255,255,0.9); border-right: 1px solid rgba(255,255,255,0.1);">
+                                            ${upa ? escapeHtml(upa) : '-'}
+                                        </td>
+                                        <td style="padding: 12px; color: #10b981; font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">
+                                            ${valor ? escapeHtml(valor) : '-'}
+                                        </td>
+                                        <td style="padding: 12px; color: #a78bfa; border-right: 1px solid rgba(255,255,255,0.1);">
+                                            ${data ? escapeHtml(data) : '-'}
+                                        </td>
+                                        <td style="padding: 12px;">
+                                            ${situacao ? `
+                                                <span style="background: rgba(${corSituacao === '#10b981' ? '16, 185, 129' : corSituacao === '#ef4444' ? '239, 68, 68' : '245, 158, 11'}, 0.2); padding: 4px 10px; border-radius: 4px; font-size: 12px; color: ${corSituacao}; border: 1px solid rgba(${corSituacao === '#10b981' ? '16, 185, 129' : corSituacao === '#ef4444' ? '239, 68, 68' : '245, 158, 11'}, 0.3);">
+                                                    ${escapeHtml(situacao)}
+                                                </span>
+                                            ` : '-'}
+                                        </td>
+                                    </tr>
+                                `;
+                            }
+                            
+                            htmlDetalhes += `
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    });
+                    
+                    htmlDetalhes += '</div>';
+                    detalhesMesesContainer.innerHTML = htmlDetalhes;
+                } else if (detalhesMesesContainer) {
+                    detalhesMesesContainer.innerHTML = '';
+                }
+            }
+            
             // Exibir valores extraídos do CSV
             if (data.valores) {
                 const valoresContainer = document.getElementById('viva-saude-financeiro-valores');
                 if (valoresContainer) {
+                    // Layout em coluna (um abaixo do outro)
                     let html = '<div style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">';
                     
-                    // VIVA RIO EM ABERTO
-                    html += `
-                        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border-left: 3px solid #10b981;">
-                            <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px; font-weight: 600;">VIVA RIO EM ABERTO</div>
-                            <div style="font-size: 16px; color: #10b981; font-weight: 500;">${data.valores.vivaRioEmAberto || 'Não encontrado'}</div>
-                        </div>
-                    `;
+                    // Função para formatar valor monetário
+                    const formatarValor = (valor) => {
+                        if (!valor || valor.trim() === '' || valor === 'R$' || valor.trim() === 'R$') {
+                            return 'R$ 0,00';
+                        }
+                        // Remover "R$" se já tiver e limpar espaços
+                        let valorLimpo = valor.toString().replace(/R\$\s*/g, '').trim();
+                        // Se estiver vazio após limpar, retornar zero
+                        if (!valorLimpo || valorLimpo === '') {
+                            return 'R$ 0,00';
+                        }
+                        // Tentar formatar como número
+                        try {
+                            // Remover pontos e substituir vírgula por ponto para parseFloat
+                            let numero = valorLimpo.replace(/\./g, '').replace(',', '.');
+                            numero = parseFloat(numero);
+                            if (isNaN(numero)) {
+                                return valor; // Retornar original se não for número
+                            }
+                            return new Intl.NumberFormat('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL'
+                            }).format(numero);
+                        } catch (e) {
+                            return valor; // Retornar original se houver erro
+                        }
+                    };
+                    
+                    // Função auxiliar para verificar se valor é negativo
+                    const isNegative = (valor) => {
+                        if (!valor) return false;
+                        const valorStr = String(valor).trim();
+                        // Verificar se começa com menos, parênteses (formato contábil) ou é um número negativo
+                        if (valorStr.startsWith('-') || valorStr.startsWith('(')) {
+                            return true;
+                        }
+                        // Tentar converter para número
+                        try {
+                            const numValor = parseFloat(valorStr.replace(/[R$\s.,()]/g, '').replace(',', '.'));
+                            return numValor < 0;
+                        } catch {
+                            return false;
+                        }
+                    };
                     
                     // SETEMBRO
-                    if (data.valores.setembro) {
+                    const setembro = data.valores.setembro;
+                    const setembroNegativo = data.valores.setembroNegativo || isNegative(setembro);
+                    if (setembro) {
+                        const setembroFormatado = formatarValor(setembro);
+                        // Valores negativos SEMPRE em vermelho, positivos em verde
+                        const corValor = setembroNegativo ? '#ef4444' : '#10b981';
+                        const corBorda = setembroNegativo ? '#ef4444' : 'transparent';
                         html += `
-                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border-left: 3px solid ${corBorda};">
                                 <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">SETEMBRO</div>
-                                <div style="font-size: 20px; font-weight: 600; color: #10b981;">${data.valores.setembro}</div>
+                                <div style="font-size: 20px; font-weight: 600; color: ${corValor};">
+                                    ${setembroFormatado}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; opacity: 0.6;">
+                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">SETEMBRO</div>
+                                <div style="font-size: 20px; font-weight: 600; color: rgba(255,255,255,0.5);">Não disponível</div>
                             </div>
                         `;
                     }
                     
                     // OUTUBRO
-                    if (data.valores.outubro) {
+                    const outubro = data.valores.outubro;
+                    const outubroNegativo = data.valores.outubroNegativo || isNegative(outubro);
+                    if (outubro) {
+                        const outubroFormatado = formatarValor(outubro);
+                        // Valores negativos SEMPRE em vermelho, positivos em verde
+                        const corValor = outubroNegativo ? '#ef4444' : '#10b981';
+                        const corBorda = outubroNegativo ? '#ef4444' : 'transparent';
                         html += `
-                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border-left: 3px solid ${corBorda};">
                                 <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">OUTUBRO</div>
-                                <div style="font-size: 20px; font-weight: 600; color: #10b981;">${data.valores.outubro}</div>
+                                <div style="font-size: 20px; font-weight: 600; color: ${corValor};">
+                                    ${outubroFormatado}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; opacity: 0.6;">
+                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">OUTUBRO</div>
+                                <div style="font-size: 20px; font-weight: 600; color: rgba(255,255,255,0.5);">Não disponível</div>
                             </div>
                         `;
                     }
                     
                     // NOVEMBRO
-                    if (data.valores.novembro) {
+                    const novembro = data.valores.novembro;
+                    const novembroNegativo = data.valores.novembroNegativo || isNegative(novembro);
+                    if (novembro) {
+                        const novembroFormatado = formatarValor(novembro);
+                        // Valores negativos SEMPRE em vermelho, positivos em verde
+                        const corValor = novembroNegativo ? '#ef4444' : '#10b981';
+                        const corBorda = novembroNegativo ? '#ef4444' : 'transparent';
                         html += `
-                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border-left: 3px solid ${corBorda};">
                                 <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">NOVEMBRO</div>
-                                <div style="font-size: 20px; font-weight: 600; color: #10b981;">${data.valores.novembro}</div>
+                                <div style="font-size: 20px; font-weight: 600; color: ${corValor};">
+                                    ${novembroFormatado}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; opacity: 0.6;">
+                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">NOVEMBRO</div>
+                                <div style="font-size: 20px; font-weight: 600; color: rgba(255,255,255,0.5);">Não disponível</div>
                             </div>
                         `;
                     }
                     
                     // TOTAL
-                    if (data.valores.total) {
+                    const total = data.valores.total;
+                    const totalNegativo = data.valores.totalNegativo || isNegative(total);
+                    if (total) {
+                        const totalFormatado = formatarValor(total);
+                        // Valores negativos SEMPRE em vermelho, positivos em verde
+                        const corValor = totalNegativo ? '#ef4444' : '#10b981';
+                        const corBorda = totalNegativo ? '#ef4444' : '#10b981';
                         html += `
-                            <div style="background: rgba(16, 185, 129, 0.1); padding: 15px; border-radius: 8px; border: 2px solid #10b981;">
+                            <div style="background: ${totalNegativo ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'}; padding: 15px; border-radius: 8px; border: 2px solid ${corBorda};">
                                 <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px; font-weight: 600;">TOTAL</div>
-                                <div style="font-size: 24px; font-weight: 700; color: #10b981;">${data.valores.total}</div>
+                                <div style="font-size: 24px; font-weight: 700; color: ${corValor};">
+                                    ${totalFormatado}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <div style="background: rgba(16, 185, 129, 0.1); padding: 15px; border-radius: 8px; border: 2px solid #10b981; opacity: 0.6;">
+                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px; font-weight: 600;">TOTAL</div>
+                                <div style="font-size: 24px; font-weight: 700; color: rgba(255,255,255,0.5);">Não disponível</div>
                             </div>
                         `;
                     }
@@ -122,7 +373,18 @@ async function fetchFinanceiroVivaSaude() {
             
             if (totalEl) {
                 // Formatar valor total (usar valor do CSV se disponível, senão usar valorTotal)
-                const valorTotal = data.valores?.total || data.valorTotal || 0;
+                let valorTotal = data.valores?.total || data.valorTotal || '0';
+                
+                // Limpar e formatar valor
+                if (typeof valorTotal === 'string') {
+                    valorTotal = valorTotal.replace(/R\$\s*/g, '').trim();
+                    if (valorTotal === '' || valorTotal === 'R$') {
+                        valorTotal = '0';
+                    }
+                    // Converter para número
+                    valorTotal = parseFloat(valorTotal.replace(/\./g, '').replace(',', '.')) || 0;
+                }
+                
                 const valorFormatado = new Intl.NumberFormat('pt-BR', {
                     style: 'currency',
                     currency: 'BRL'
@@ -131,8 +393,12 @@ async function fetchFinanceiroVivaSaude() {
             }
             
             if (updateEl) {
-                const updateDate = new Date(data.lastUpdate);
-                updateEl.textContent = updateDate.toLocaleString('pt-BR');
+                if (data.lastUpdate) {
+                    const updateDate = new Date(data.lastUpdate);
+                    updateEl.textContent = updateDate.toLocaleString('pt-BR');
+                } else {
+                    updateEl.textContent = new Date().toLocaleString('pt-BR');
+                }
             }
             
             if (statusEl) {
@@ -223,10 +489,9 @@ function initializeEventListeners() {
 
 // Verificar todos os logins
 async function checkAllLogins() {
-    addLog('Iniciando verificação de todos os sistemas...', 'info');
+    addLog('Verificando todos os sistemas...', 'info');
     
-    // Verificar sistemas em paralelo, mas Coop Vitta e Delta sequencialmente
-    // (para evitar conflito no diretório de downloads de CSV)
+    // Verificar todos os processos
     await Promise.all([
         checkLogin('viva-saude'),
         (async () => {
@@ -235,10 +500,11 @@ async function checkAllLogins() {
         })()
     ]);
     
-    // Buscar dados financeiros do Viva Saúde (Google Sheets - pausado temporariamente)
-    // fetchFinanceiroVivaSaude();
+    // Buscar dados financeiros do Google Sheets
+    addLog('Buscando dados financeiros do Google Sheets...', 'info');
+    fetchFinanceiroVivaSaude();
     
-    addLog('Verificação de todos os sistemas concluída', 'success');
+    addLog('Verificação concluída', 'success');
 }
 
 // Verificar login de um sistema específico
@@ -511,19 +777,13 @@ document.querySelectorAll('.nav-item').forEach(item => {
                 // Mostrar o card do sistema selecionado e seus cards relacionados
                 const systemCard = document.getElementById(`${system}-card`);
                 const financeiroCard = document.getElementById(`${system}-financeiro-card`);
-                const contratosCard = document.getElementById(`${system}-contratos-card`);
                 
                 if (systemCard) {
                     systemCard.style.display = 'block';
                     systemCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
                 
-                // Mostrar card de contratos apenas para Viva Saúde
-                if (contratosCard && system === 'viva-saude') {
-                    contratosCard.style.display = 'block';
-                } else if (contratosCard) {
-                    contratosCard.style.display = 'none';
-                }
+                // Nota: O card de contratos agora está dentro do card principal, não precisa ser controlado separadamente
                 
                 if (financeiroCard) {
                     financeiroCard.style.display = 'block';

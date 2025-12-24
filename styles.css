@@ -327,7 +327,7 @@ body {
 /* Dashboard Container */
 .dashboard-container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    grid-template-columns: 1fr;
     gap: 24px;
     margin-bottom: 32px;
 }
@@ -755,7 +755,7 @@ body {
     }
     
     .dashboard-container {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 

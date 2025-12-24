@@ -5,6 +5,9 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const http = require('http');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 require('dotenv').config();
 
 const app = express();
@@ -2128,14 +2131,105 @@ async function fetchGoogleSheetsFinanceiro() {
     }
 }
 
-// Rota para buscar dados financeiros do Google Sheets
+// Rota para buscar dados financeiros do Google Sheets (usando Python)
 app.get('/api/financeiro/viva-saude', async (req, res) => {
+    let pythonProcess = null;
     try {
-        const result = await fetchGoogleSheetsFinanceiro();
+        console.log('[GOOGLE SHEETS] Iniciando extração via Python...');
+        
+        // Executar script Python
+        const scriptPath = path.join(__dirname, 'google_sheets_extractor.py');
+        const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+        
+        // Usar caminho absoluto e garantir que está correto
+        const fullCommand = `"${pythonCommand}" "${scriptPath}"`;
+        
+        console.log(`[GOOGLE SHEETS] Executando: ${fullCommand}`);
+        console.log(`[GOOGLE SHEETS] Script path: ${scriptPath}`);
+        console.log(`[GOOGLE SHEETS] Python command: ${pythonCommand}`);
+        
+        // Executar com opções mais robustas e tratamento de timeout
+        const startTime = Date.now();
+        
+        const { stdout, stderr } = await Promise.race([
+            execAsync(fullCommand, {
+                maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+                timeout: 180000, // 3 minutos timeout
+                cwd: __dirname, // Executar no diretório do projeto
+                env: {
+                    ...process.env,
+                    PYTHONUNBUFFERED: '1' // Desabilitar buffer do Python
+                }
+            }),
+            // Timeout manual adicional
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Timeout: Script Python demorou mais de 3 minutos')), 180000)
+            )
+        ]);
+        
+        const elapsedTime = Date.now() - startTime;
+        console.log(`[GOOGLE SHEETS] Script executado em ${elapsedTime}ms`);
+        
+        // Logs do Python vão para stderr (usamos sys.stderr no script)
+        if (stderr && stderr.trim()) {
+            console.log('[GOOGLE SHEETS] Logs Python (stderr):');
+            // Mostrar apenas últimas 2000 linhas para não sobrecarregar
+            const stderrLines = stderr.split('\n');
+            const lastLines = stderrLines.slice(-50).join('\n');
+            console.log(lastLines);
+        }
+        
+        // Verificar se stdout está vazio
+        if (!stdout || !stdout.trim()) {
+            console.error('[GOOGLE SHEETS] ⚠️ stdout vazio!');
+            console.error('[GOOGLE SHEETS] stderr (últimas 20 linhas):', stderr.split('\n').slice(-20).join('\n'));
+            throw new Error('Script Python não retornou dados. Verifique os logs acima.');
+        }
+        
+        console.log(`[GOOGLE SHEETS] stdout recebido (${stdout.length} caracteres)`);
+        
+        // Parsear resultado JSON do stdout
+        let result;
+        try {
+            // Limpar stdout (remover logs que possam estar misturados)
+            const stdoutClean = stdout.trim();
+            // Tentar encontrar JSON no stdout (pode ter logs antes)
+            const jsonMatch = stdoutClean.match(/\{[\s\S]*\}/);
+            const jsonString = jsonMatch ? jsonMatch[0] : stdoutClean;
+            
+            if (!jsonString || jsonString.length < 10) {
+                throw new Error('JSON não encontrado no stdout');
+            }
+            
+            result = JSON.parse(jsonString);
+        } catch (parseError) {
+            console.error('[GOOGLE SHEETS] Erro ao parsear JSON:', parseError.message);
+            console.error('[GOOGLE SHEETS] stdout (primeiros 1000 chars):', stdout.substring(0, 1000));
+            console.error('[GOOGLE SHEETS] stdout (últimos 1000 chars):', stdout.substring(Math.max(0, stdout.length - 1000)));
+            throw new Error(`Resposta inválida do script Python: ${parseError.message}`);
+        }
+        
+        console.log('[GOOGLE SHEETS] Resultado:', result.success ? '✅ Sucesso' : '❌ Falha');
+        if (result.valores) {
+            console.log('[GOOGLE SHEETS] Valores extraídos:', JSON.stringify(result.valores, null, 2));
+        }
+        
         res.json(result);
     } catch (error) {
-        console.error('Erro ao buscar dados financeiros:', error);
-        res.status(500).json({ success: false, error: error.message });
+        console.error('[GOOGLE SHEETS] Erro ao executar script Python:', error.message);
+        console.error('[GOOGLE SHEETS] Tipo de erro:', error.constructor.name);
+        
+        // Se for timeout, fornecer mensagem mais clara
+        if (error.message.includes('Timeout') || error.message.includes('timeout')) {
+            console.error('[GOOGLE SHEETS] ⚠️ O script Python demorou muito para executar. Pode estar travado.');
+        }
+        
+        res.status(500).json({ 
+            success: false, 
+            error: error.message,
+            message: 'Erro ao executar extração via Python',
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 });
 
