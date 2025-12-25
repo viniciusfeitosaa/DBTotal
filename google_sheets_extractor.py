@@ -106,44 +106,49 @@ def extract_financial_data(driver, url):
         print(f"[GOOGLE SHEETS] Acessando planilha: {url}", file=sys.stderr)
         driver.get(url)
         
-        # Aguardar página carregar
+        # Aguardar página carregar (reduzido de 5s para 2s)
         print("[GOOGLE SHEETS] Aguardando página carregar...", file=sys.stderr)
-        time.sleep(5)
+        wait = WebDriverWait(driver, 10)
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+        time.sleep(2)  # Reduzido de 5s para 2s
         
         # Verificar se há erro de permissão
-        page_text = driver.find_element(By.TAG_NAME, "body").text
-        if "permissão" in page_text.lower() or "permission" in page_text.lower() or "acesso negado" in page_text.lower():
-            result["error"] = "Problema de permissão detectado"
-            result["message"] = "A planilha requer permissão de acesso"
-            return result
+        try:
+            page_text = driver.find_element(By.TAG_NAME, "body").text
+            if "permissão" in page_text.lower() or "permission" in page_text.lower() or "acesso negado" in page_text.lower():
+                result["error"] = "Problema de permissão detectado"
+                result["message"] = "A planilha requer permissão de acesso"
+                return result
+        except:
+            pass  # Continuar se não conseguir verificar
         
-        # Aguardar planilha renderizar
+        # Aguardar planilha renderizar (reduzido de 5s para 2s)
         print("[GOOGLE SHEETS] Aguardando planilha renderizar...", file=sys.stderr)
-        time.sleep(5)
+        time.sleep(2)  # Reduzido de 5s para 2s
         
-        # Tentar encontrar a aba "RELATÓRIO CYLLA"
+        # Tentar encontrar a aba "RELATÓRIO CYLLA" (timeout reduzido)
         print("[GOOGLE SHEETS] Procurando aba 'RELATÓRIO CYLLA'...", file=sys.stderr)
         try:
             # Procurar por abas (sheets tabs)
             aba_encontrada = False
-            wait = WebDriverWait(driver, 10)
+            wait_aba = WebDriverWait(driver, 5)  # Reduzido de 10s para 5s
             
             # Tentar diferentes seletores para encontrar as abas
             aba_selectors = [
-                "//div[contains(@class, 'sheet-tab') and contains(text(), 'RELATÓRIO CYLLA')]",
-                "//div[contains(@class, 'docs-sheet-tab') and contains(text(), 'RELATÓRIO CYLLA')]",
+                "//span[contains(text(), 'RELATÓRIO CYLLA')]",  # Mais comum, tentar primeiro
                 "//div[@role='tab' and contains(text(), 'RELATÓRIO CYLLA')]",
-                "//span[contains(text(), 'RELATÓRIO CYLLA')]"
+                "//div[contains(@class, 'docs-sheet-tab') and contains(text(), 'RELATÓRIO CYLLA')]",
+                "//div[contains(@class, 'sheet-tab') and contains(text(), 'RELATÓRIO CYLLA')]"
             ]
             
             for selector in aba_selectors:
                 try:
-                    aba_element = wait.until(EC.presence_of_element_located((By.XPATH, selector)))
+                    aba_element = wait_aba.until(EC.element_to_be_clickable((By.XPATH, selector)))
                     if aba_element:
                         print(f"[GOOGLE SHEETS] Aba encontrada com seletor: {selector}", file=sys.stderr)
                         aba_element.click()
                         aba_encontrada = True
-                        time.sleep(3)
+                        time.sleep(1)  # Reduzido de 3s para 1s
                         break
                 except:
                     continue
@@ -153,8 +158,8 @@ def extract_financial_data(driver, url):
         except Exception as e:
             print(f"[GOOGLE SHEETS] Erro ao procurar aba: {e}", file=sys.stderr)
         
-        # Aguardar mais um pouco para garantir que a aba carregou
-        time.sleep(5)
+        # Aguardar aba carregar (reduzido de 5s para 2s)
+        time.sleep(2)  # Reduzido de 5s para 2s
         
         # Método 0: Tentar obter CSV diretamente via URL de exportação (mais confiável)
         print("[GOOGLE SHEETS] Tentando obter CSV via URL de exportação...", file=sys.stderr)
@@ -204,22 +209,20 @@ def extract_financial_data(driver, url):
             
             for export_url in export_urls:
                 try:
-                    print(f"[GOOGLE SHEETS] Tentando URL: {export_url}", file=sys.stderr)
-                    # Usar urllib para fazer requisição HTTP direta
+                    # Usar urllib para fazer requisição HTTP direta (timeout reduzido)
                     req = urllib.request.Request(export_url)
                     req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
                     
-                    response = urllib.request.urlopen(req, timeout=15)
+                    response = urllib.request.urlopen(req, timeout=8)  # Reduzido de 15s para 8s
                     csv_data = response.read().decode('utf-8')
                     
                     # Verificar se é CSV válido (não HTML)
                     if csv_data and len(csv_data) > 50 and ',' in csv_data and not csv_data.strip().startswith('<'):
                         csv_content = csv_data
                         print(f"[GOOGLE SHEETS] ✅ CSV obtido via URL de exportação ({len(csv_data)} caracteres)", file=sys.stderr)
-                        print(f"[GOOGLE SHEETS] Primeiras 200 chars do CSV: {csv_data[:200]}", file=sys.stderr)
                         break
                 except Exception as e:
-                    print(f"[GOOGLE SHEETS] Erro ao tentar URL {export_url}: {str(e)[:100]}", file=sys.stderr)
+                    # Log removido para melhorar performance - apenas continuar para próxima URL
                     continue
                     
         except Exception as e:
@@ -232,10 +235,10 @@ def extract_financial_data(driver, url):
             print("[GOOGLE SHEETS] Extraindo dados diretamente da planilha renderizada...", file=sys.stderr)
         
         try:
-            # Aguardar células da planilha carregarem
-            wait = WebDriverWait(driver, 15)
+            # Aguardar células da planilha carregarem (timeout reduzido)
+            wait = WebDriverWait(driver, 10)  # Reduzido de 15s para 10s
             print("[GOOGLE SHEETS] Aguardando planilha carregar completamente...", file=sys.stderr)
-            time.sleep(8)  # Aguardar mais tempo para planilha renderizar completamente
+            time.sleep(3)  # Reduzido de 8s para 3s
             
             # Método 1: Tentar acessar célula A2 diretamente usando JavaScript
             print("[GOOGLE SHEETS] Tentando acessar célula A2 via JavaScript...", file=sys.stderr)
@@ -562,7 +565,7 @@ def process_csv(csv_content):
         print(f"[GOOGLE SHEETS] CSV parseado: {len(rows)} linhas encontradas", file=sys.stderr)
         
         # NOVA FUNCIONALIDADE: Identificar meses na coluna A e coletar dados relacionados
-        print("[GOOGLE SHEETS] Procurando meses na coluna A...", file=sys.stderr)
+        # Log removido para melhorar performance
         for i, row in enumerate(rows):
             if not row or len(row) == 0:
                 continue
@@ -586,6 +589,7 @@ def process_csv(csv_content):
                         "linha": i + 1,  # Linha no Excel (1-based)
                         "indice": i,     # Índice no array (0-based)
                         "upas": [],
+                        "valores_nf": [],
                         "valores_recebidos": [],
                         "datas": [],
                         "situacoes": []
@@ -610,8 +614,36 @@ def process_csv(csv_content):
                         if len(rows[idx_upa]) > 1:  # Coluna B existe
                             upa = str(rows[idx_upa][1]).strip() if len(rows[idx_upa]) > 1 else ""
                             if upa and upa not in mes_data["upas"]:
-                                mes_data["upas"].append(upa)
-                                print(f"[GOOGLE SHEETS]   UPA encontrada em B{idx_upa+1}: '{upa}'", file=sys.stderr)
+                                # Filtrar valores monetários (remover se começar com R$ ou contiver padrão de valor monetário)
+                                upa_upper = upa.upper()
+                                # Verificar se é um valor monetário
+                                is_valor_monetario = (
+                                    upa_upper.startswith('R$') or
+                                    upa_upper.startswith('$') or
+                                    (re.search(r'^\s*R\$\s*[\d.,]+', upa, re.IGNORECASE)) or
+                                    (re.search(r'^\s*[\d.,]+\s*$', upa) and (',' in upa or '.' in upa))
+                                )
+                                
+                                if not is_valor_monetario:
+                                    mes_data["upas"].append(upa)
+                                    # Log removido para melhorar performance
+                
+                # Coletar VALOR NF em C2 a C6 (coluna C = índice 2)
+                # Se mês está na linha i+1, coletar linhas i-2, i-1, i, i+1, i+2 (C2 a C6)
+                linhas_valor_nf = range(max(0, i-2), min(len(rows), i+3))  # Índices para C2 a C6
+                for idx_valor_nf in linhas_valor_nf:
+                    if len(rows[idx_valor_nf]) > 2:  # Coluna C existe
+                        valor_nf = str(rows[idx_valor_nf][2]).strip() if len(rows[idx_valor_nf]) > 2 else ""
+                        if valor_nf:
+                            # Filtrar cabeçalho "VALOR NF." e variações
+                            valor_nf_upper = valor_nf.upper().strip()
+                            # Remover cabeçalhos
+                            if valor_nf_upper not in ['VALOR NF', 'VALOR NF.', 'VALORNF', 'VALORNF.']:
+                                mes_data["valores_nf"].append({
+                                    "linha": idx_valor_nf + 1,
+                                    "valor": valor_nf
+                                })
+                                # Log removido para melhorar performance
                 
                 # Coletar Valores Recebidos em D2 a D6 (coluna D = índice 3)
                 # Se mês está na linha i+1, coletar linhas i-2, i-1, i, i+1, i+2 (D2 a D6)
@@ -624,7 +656,7 @@ def process_csv(csv_content):
                                 "linha": idx_valor + 1,
                                 "valor": valor
                             })
-                            print(f"[GOOGLE SHEETS]   Valor recebido encontrado em D{idx_valor+1}: '{valor}'", file=sys.stderr)
+                            # Log removido para melhorar performance
                 
                 # Coletar Datas em E2 a E6 (coluna E = índice 4)
                 # Se mês está na linha i+1, coletar linhas i-2, i-1, i, i+1, i+2 (E2 a E6)
@@ -637,7 +669,7 @@ def process_csv(csv_content):
                                 "linha": idx_data + 1,
                                 "data": data
                             })
-                            print(f"[GOOGLE SHEETS]   Data encontrada em E{idx_data+1}: '{data}'", file=sys.stderr)
+                            # Log removido para melhorar performance
                 
                 # Coletar Situações em H2 até H5 (coluna H = índice 7)
                 # Se mês está na linha i+1, coletar linhas i-2, i-1, i, i+1 (H2 até H5)
@@ -650,14 +682,10 @@ def process_csv(csv_content):
                                 "linha": idx_situacao + 1,
                                 "situacao": situacao
                             })
-                            print(f"[GOOGLE SHEETS]   Situação encontrada em H{idx_situacao+1}: '{situacao}'", file=sys.stderr)
-        
-        # Debug: imprimir linhas 30-40 (próximo das linhas que procuramos)
-        print(f"[GOOGLE SHEETS] Linhas 30-40 (índices 29-39):", file=sys.stderr)
-        for i in range(29, min(40, len(rows))):
-            print(f"  Linha {i+1} (índice {i}): {rows[i]}", file=sys.stderr)
+                            # Log removido para melhorar performance
         
         # Buscar especificamente nas linhas 33-37 (índices 32-36)
+        # Logs de debug removidos para melhorar performance
         # A33: VIVA RIO EM ABERTO
         # A34: SETEMBRO | B34: valor
         # A35: OUTUBRO | B35: valor

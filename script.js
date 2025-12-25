@@ -89,9 +89,19 @@ async function fetchFinanceiroVivaSaude() {
                             return upa && upa.trim() !== '';
                         });
                         
+                        const valoresNFValidos = (mesData.valores_nf || []).filter(item => {
+                            const valor = item.valor ? item.valor.trim() : '';
+                            if (!valor || valor === '') return false;
+                            // Remover cabeçalho "VALOR NF." e variações
+                            const valorUpper = valor.toUpperCase().trim();
+                            const valoresInvalidos = ['VALOR NF', 'VALOR NF.', 'VALORNF', 'VALORNF.'];
+                            return !valoresInvalidos.includes(valorUpper);
+                        });
+                        
                         // Determinar número máximo de linhas
                         const maxLinhas = Math.max(
                             valoresValidos.length,
+                            valoresNFValidos.length,
                             datasValidas.length,
                             situacoesValidas.length,
                             upasValidas.length
@@ -109,6 +119,7 @@ async function fetchFinanceiroVivaSaude() {
                                             <thead>
                                                 <tr style="background: rgba(255,255,255,0.1); border-bottom: 2px solid rgba(255,255,255,0.2);">
                                                     <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">UPA</th>
+                                                    <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">VALOR NF</th>
                                                     <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">Valor Recebido</th>
                                                     <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">Data</th>
                                                     <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600;">Situação</th>
@@ -120,6 +131,7 @@ async function fetchFinanceiroVivaSaude() {
                             // Criar linhas da tabela
                             for (let i = 0; i < maxLinhas; i++) {
                                 const upa = upasValidas[i] || '';
+                                const valorNF = valoresNFValidos[i] ? valoresNFValidos[i].valor : '';
                                 const valor = valoresValidos[i] ? valoresValidos[i].valor : '';
                                 const data = datasValidas[i] ? datasValidas[i].data : '';
                                 let situacao = situacoesValidas[i] ? situacoesValidas[i].situacao.trim() : '';
@@ -155,6 +167,9 @@ async function fetchFinanceiroVivaSaude() {
                                     <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); ${i % 2 === 0 ? 'background: rgba(255,255,255,0.02);' : ''}">
                                         <td style="padding: 12px; color: rgba(255,255,255,0.9); border-right: 1px solid rgba(255,255,255,0.1);">
                                             ${upa ? escapeHtml(upa) : '-'}
+                                        </td>
+                                        <td style="padding: 12px; color: #f59e0b; font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">
+                                            ${valorNF ? escapeHtml(valorNF) : '-'}
                                         </td>
                                         <td style="padding: 12px; color: #10b981; font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">
                                             ${valor ? escapeHtml(valor) : '-'}
@@ -198,9 +213,19 @@ async function fetchFinanceiroVivaSaude() {
                     
                     // Função para formatar valor monetário
                     const formatarValor = (valor) => {
-                        if (!valor || valor.trim() === '' || valor === 'R$' || valor.trim() === 'R$') {
+                        // Se for número, formatar diretamente
+                        if (typeof valor === 'number') {
+                            return new Intl.NumberFormat('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL'
+                            }).format(valor);
+                        }
+                        
+                        // Se for string, processar
+                        if (!valor || (typeof valor === 'string' && (valor.trim() === '' || valor.trim() === 'R$'))) {
                             return 'R$ 0,00';
                         }
+                        
                         // Remover "R$" se já tiver e limpar espaços
                         let valorLimpo = valor.toString().replace(/R\$\s*/g, '').trim();
                         // Se estiver vazio após limpar, retornar zero
@@ -224,122 +249,200 @@ async function fetchFinanceiroVivaSaude() {
                         }
                     };
                     
-                    // Função auxiliar para verificar se valor é negativo
-                    const isNegative = (valor) => {
-                        if (!valor) return false;
+                    // Função auxiliar para converter valor para número
+                    const converterValor = (valor) => {
+                        if (!valor) return 0;
                         const valorStr = String(valor).trim();
-                        // Verificar se começa com menos, parênteses (formato contábil) ou é um número negativo
-                        if (valorStr.startsWith('-') || valorStr.startsWith('(')) {
-                            return true;
-                        }
-                        // Tentar converter para número
+                        // Remover R$, pontos, espaços e converter vírgula para ponto
+                        const valorLimpo = valorStr.replace(/R\$\s*/g, '').replace(/\./g, '').replace(',', '.').trim();
                         try {
-                            const numValor = parseFloat(valorStr.replace(/[R$\s.,()]/g, '').replace(',', '.'));
-                            return numValor < 0;
+                            return parseFloat(valorLimpo) || 0;
                         } catch {
-                            return false;
+                            return 0;
                         }
                     };
                     
-                    // SETEMBRO
-                    const setembro = data.valores.setembro;
-                    const setembroNegativo = data.valores.setembroNegativo || isNegative(setembro);
-                    if (setembro) {
-                        const setembroFormatado = formatarValor(setembro);
-                        // Valores negativos SEMPRE em vermelho, positivos em verde
-                        const corValor = setembroNegativo ? '#ef4444' : '#10b981';
-                        const corBorda = setembroNegativo ? '#ef4444' : 'transparent';
-                        html += `
-                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border-left: 3px solid ${corBorda};">
-                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">SETEMBRO</div>
-                                <div style="font-size: 20px; font-weight: 600; color: ${corValor};">
-                                    ${setembroFormatado}
-                                </div>
-                            </div>
-                        `;
-                    } else {
-                        html += `
-                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; opacity: 0.6;">
-                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">SETEMBRO</div>
-                                <div style="font-size: 20px; font-weight: 600; color: rgba(255,255,255,0.5);">Não disponível</div>
-                            </div>
-                        `;
-                    }
+                    // Função para calcular valor total de um mês baseado na situação
+                    const calcularValorMes = (mesNome) => {
+                        const mesData = data.valores.meses?.[mesNome];
+                        if (!mesData) return { valor: 0, negativo: false };
+                        
+                        // Filtrar valores recebidos (remover cabeçalhos) - mesma lógica da tabela
+                        const valoresValidos = (mesData.valores_recebidos || []).filter(item => {
+                            if (!item.valor) return false;
+                            const valor = item.valor.trim().toUpperCase();
+                            return valor && valor !== '' && valor !== 'VALOR RECEDIDO' && valor !== 'VALOR RECEBIDO';
+                        });
+                        
+                        // Filtrar situações (remover cabeçalhos e inválidas) - mesma lógica da tabela
+                        const situacoesValidas = (mesData.situacoes || []).filter(item => {
+                            if (!item.situacao) return false;
+                            const situacao = item.situacao.trim();
+                            if (!situacao || situacao === '') return false;
+                            
+                            // Remover "SITUAO" com encoding incorreto
+                            if (situacao.includes('') || situacao.includes('')) {
+                                const situacaoUpper = situacao.toUpperCase();
+                                const situacaoNormalizada = situacaoUpper.replace(/[^A-Z0-9]/g, '');
+                                if (situacaoNormalizada === 'SITUAO' || situacaoNormalizada === 'SITUACAO') {
+                                    return false; // Remover apenas "SITUAO" com encoding incorreto
+                                }
+                                // Se contém caracteres especiais mas não é "SITUAO", manter (pode ser outro valor válido)
+                            }
+                            
+                            return true;
+                        });
+                        
+                        let total = 0;
+                        const valoresProcessados = [];
+                        
+                        // Usar correspondência por índice do array (mesma lógica da tabela)
+                        // A tabela usa valoresValidos[i] e situacoesValidas[i] para correspondência
+                        const maxLinhas = Math.max(valoresValidos.length, situacoesValidas.length);
+                        
+                        for (let i = 0; i < maxLinhas; i++) {
+                            const itemValor = valoresValidos[i];
+                            const itemSituacao = situacoesValidas[i];
+                            
+                            if (!itemSituacao || !itemSituacao.situacao) continue;
+                            
+                            let situacao = itemSituacao.situacao.trim();
+                            
+                            // Verificação final: remover apenas "SITUAO" com encoding incorreto (mesma lógica da tabela)
+                            if (situacao) {
+                                if (situacao.includes('') || situacao.includes('')) {
+                                    const situacaoUpper = situacao.toUpperCase();
+                                    const situacaoNormalizada = situacaoUpper.replace(/[^A-Z0-9]/g, '');
+                                    if (situacaoNormalizada === 'SITUAO' || situacaoNormalizada === 'SITUACAO') {
+                                        situacao = ''; // Remover apenas "SITUAO" com encoding incorreto
+                                    }
+                                }
+                            }
+                            
+                            const situacaoUpper = situacao ? situacao.toUpperCase() : '';
+                            
+                            // Se tem situação e não é "OK", processar
+                            if (situacaoUpper && situacaoUpper !== 'OK') {
+                                // Verificar se a situação contém um valor monetário
+                                const valorMonetarioNaSituacao = converterValor(situacao);
+                                
+                                if (valorMonetarioNaSituacao > 0) {
+                                    // Se a situação contém um valor monetário, usar esse valor
+                                    total += valorMonetarioNaSituacao;
+                                    valoresProcessados.push({
+                                        indice: i,
+                                        linha: itemSituacao.linha,
+                                        valor: valorMonetarioNaSituacao,
+                                        situacao: situacaoUpper,
+                                        valorOriginal: situacao,
+                                        origem: 'situacao'
+                                    });
+                                } else if (itemValor) {
+                                    // Se não tem valor monetário na situação, usar o valor recebido
+                                    const valor = converterValor(itemValor.valor);
+                                    if (valor > 0) {
+                                        total += valor;
+                                        valoresProcessados.push({
+                                            indice: i,
+                                            linha: itemValor.linha,
+                                            valor: valor,
+                                            situacao: situacaoUpper,
+                                            valorOriginal: itemValor.valor,
+                                            origem: 'valor_recebido'
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Se há valores em aberto (total > 0), retornar como negativo
+                        // Valores em aberto são sempre negativos
+                        const resultado = {
+                            valor: total > 0 ? -total : 0, // Tornar negativo se há valores
+                            negativo: total > 0 // Se há valores somados, são negativos (em aberto)
+                        };
+                        
+                        // Debug detalhado
+                        console.log(`[DEBUG ${mesNome}]`, {
+                            totalCalculado: total,
+                            resultado: resultado,
+                            valoresProcessados: valoresProcessados,
+                            totalValoresValidos: valoresValidos.length,
+                            totalSituacoesValidas: situacoesValidas.length,
+                            maxLinhas: maxLinhas
+                        });
+                        
+                        return resultado;
+                    };
                     
-                    // OUTUBRO
-                    const outubro = data.valores.outubro;
-                    const outubroNegativo = data.valores.outubroNegativo || isNegative(outubro);
-                    if (outubro) {
-                        const outubroFormatado = formatarValor(outubro);
-                        // Valores negativos SEMPRE em vermelho, positivos em verde
-                        const corValor = outubroNegativo ? '#ef4444' : '#10b981';
-                        const corBorda = outubroNegativo ? '#ef4444' : 'transparent';
-                        html += `
-                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border-left: 3px solid ${corBorda};">
-                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">OUTUBRO</div>
-                                <div style="font-size: 20px; font-weight: 600; color: ${corValor};">
-                                    ${outubroFormatado}
-                                </div>
-                            </div>
-                        `;
-                    } else {
-                        html += `
-                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; opacity: 0.6;">
-                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">OUTUBRO</div>
-                                <div style="font-size: 20px; font-weight: 600; color: rgba(255,255,255,0.5);">Não disponível</div>
-                            </div>
-                        `;
-                    }
+                    // Calcular valores dos meses a partir da situação
+                    const setembroCalc = calcularValorMes('SETEMBRO');
+                    const outubroCalc = calcularValorMes('OUTUBRO');
+                    const novembroCalc = calcularValorMes('NOVEMBRO');
                     
-                    // NOVEMBRO
-                    const novembro = data.valores.novembro;
-                    const novembroNegativo = data.valores.novembroNegativo || isNegative(novembro);
-                    if (novembro) {
-                        const novembroFormatado = formatarValor(novembro);
-                        // Valores negativos SEMPRE em vermelho, positivos em verde
-                        const corValor = novembroNegativo ? '#ef4444' : '#10b981';
-                        const corBorda = novembroNegativo ? '#ef4444' : 'transparent';
-                        html += `
-                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border-left: 3px solid ${corBorda};">
-                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">NOVEMBRO</div>
-                                <div style="font-size: 20px; font-weight: 600; color: ${corValor};">
-                                    ${novembroFormatado}
-                                </div>
-                            </div>
-                        `;
-                    } else {
-                        html += `
-                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; opacity: 0.6;">
-                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">NOVEMBRO</div>
-                                <div style="font-size: 20px; font-weight: 600; color: rgba(255,255,255,0.5);">Não disponível</div>
-                            </div>
-                        `;
-                    }
+                    // Total já calcula somando os valores (que já vêm negativos se houver valores em aberto)
+                    // Removido totalCalc separado - será calculado diretamente abaixo
                     
-                    // TOTAL
-                    const total = data.valores.total;
-                    const totalNegativo = data.valores.totalNegativo || isNegative(total);
-                    if (total) {
-                        const totalFormatado = formatarValor(total);
-                        // Valores negativos SEMPRE em vermelho, positivos em verde
-                        const corValor = totalNegativo ? '#ef4444' : '#10b981';
-                        const corBorda = totalNegativo ? '#ef4444' : '#10b981';
-                        html += `
-                            <div style="background: ${totalNegativo ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'}; padding: 15px; border-radius: 8px; border: 2px solid ${corBorda};">
-                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px; font-weight: 600;">TOTAL</div>
-                                <div style="font-size: 24px; font-weight: 700; color: ${corValor};">
-                                    ${totalFormatado}
-                                </div>
+                    // SETEMBRO - sempre exibir (0 se não houver valores em aberto)
+                    const setembroNegativo = setembroCalc.negativo;
+                    const setembroValorAbsoluto = Math.abs(setembroCalc.valor); // Valor absoluto (sem sinal de menos)
+                    const setembroFormatado = formatarValor(setembroValorAbsoluto);
+                    const corValorSetembro = setembroNegativo ? '#ef4444' : '#10b981';
+                    const corBordaSetembro = setembroNegativo ? '#ef4444' : 'transparent';
+                    html += `
+                        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border-left: 3px solid ${corBordaSetembro};">
+                            <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">SETEMBRO</div>
+                            <div style="font-size: 20px; font-weight: 600; color: ${corValorSetembro};">
+                                ${setembroFormatado}
                             </div>
-                        `;
-                    } else {
-                        html += `
-                            <div style="background: rgba(16, 185, 129, 0.1); padding: 15px; border-radius: 8px; border: 2px solid #10b981; opacity: 0.6;">
-                                <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px; font-weight: 600;">TOTAL</div>
-                                <div style="font-size: 24px; font-weight: 700; color: rgba(255,255,255,0.5);">Não disponível</div>
+                        </div>
+                    `;
+                    
+                    // OUTUBRO - sempre exibir (0 se não houver valores em aberto)
+                    const outubroNegativo = outubroCalc.negativo;
+                    const outubroValorAbsoluto = Math.abs(outubroCalc.valor); // Valor absoluto (sem sinal de menos)
+                    const outubroFormatado = formatarValor(outubroValorAbsoluto);
+                    const corValorOutubro = outubroNegativo ? '#ef4444' : '#10b981';
+                    const corBordaOutubro = outubroNegativo ? '#ef4444' : 'transparent';
+                    html += `
+                        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border-left: 3px solid ${corBordaOutubro};">
+                            <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">OUTUBRO</div>
+                            <div style="font-size: 20px; font-weight: 600; color: ${corValorOutubro};">
+                                ${outubroFormatado}
                             </div>
-                        `;
-                    }
+                        </div>
+                    `;
+                    
+                    // NOVEMBRO - sempre exibir (0 se não houver valores em aberto)
+                    const novembroNegativo = novembroCalc.negativo;
+                    const novembroValorAbsoluto = Math.abs(novembroCalc.valor); // Valor absoluto (sem sinal de menos)
+                    const novembroFormatado = formatarValor(novembroValorAbsoluto);
+                    const corValorNovembro = novembroNegativo ? '#ef4444' : '#10b981';
+                    const corBordaNovembro = novembroNegativo ? '#ef4444' : 'transparent';
+                    html += `
+                        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border-left: 3px solid ${corBordaNovembro};">
+                            <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px;">NOVEMBRO</div>
+                            <div style="font-size: 20px; font-weight: 600; color: ${corValorNovembro};">
+                                ${novembroFormatado}
+                            </div>
+                        </div>
+                    `;
+                    
+                    // TOTAL - sempre exibir (0 se não houver valores em aberto)
+                    const totalValor = setembroCalc.valor + outubroCalc.valor + novembroCalc.valor;
+                    const totalNegativo = totalValor < 0; // Negativo se há valores em aberto
+                    const totalValorAbsoluto = Math.abs(totalValor); // Valor absoluto (sem sinal de menos)
+                    const totalFormatado = formatarValor(totalValorAbsoluto);
+                    const corValorTotal = totalNegativo ? '#ef4444' : '#10b981';
+                    const corBordaTotal = totalNegativo ? '#ef4444' : '#10b981';
+                    html += `
+                        <div style="background: ${totalNegativo ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'}; padding: 15px; border-radius: 8px; border: 2px solid ${corBordaTotal};">
+                            <div style="font-size: 14px; color: rgba(255,255,255,0.7); margin-bottom: 8px; font-weight: 600;">TOTAL EM ABERTO VIVA RIO</div>
+                            <div style="font-size: 24px; font-weight: 700; color: ${corValorTotal};">
+                                ${totalFormatado}
+                            </div>
+                        </div>
+                    `;
                     
                     html += '</div>';
                     valoresContainer.innerHTML = html;
@@ -946,6 +1049,7 @@ function updateGeralCard() {
         }
     }
 }
+
 
 // Verificação inicial
 setTimeout(() => {
