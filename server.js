@@ -111,37 +111,30 @@ if (missingCredentials.length > 0) {
 // Helper function para delay (substitui waitForTimeout que foi removido)
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Helper function para configurar Puppeteer (compatível com Render)
+function getPuppeteerOptions() {
+    return {
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu',
+            '--disable-software-rasterizer'
+        ]
+    };
+}
+
 // Função para fazer login no RHID e exportar CSV (Coop Vitta e Delta)
 async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITTA') {
     let browser = null;
     try {
         // Configurar cliente do Puppeteer com download
-        // Configurar Puppeteer para Render (com Chrome instalado)
-        const puppeteerOptions = {
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--disable-gpu'
-            ]
-        };
-        
-        // Se estiver no Render, tentar usar Chrome instalado
-        if (process.env.RENDER) {
-            // Puppeteer deve encontrar Chrome automaticamente após instalação
-            // Mas podemos forçar o caminho se necessário
-            const chromePath = process.env.CHROME_PATH || '/usr/bin/google-chrome-stable';
-            if (require('fs').existsSync(chromePath)) {
-                puppeteerOptions.executablePath = chromePath;
-            }
-        }
-        
-        browser = await puppeteer.launch(puppeteerOptions);
+        browser = await puppeteer.launch(getPuppeteerOptions());
         
         const context = browser.defaultBrowserContext();
         await context.overridePermissions('https://rhid.com.br', []);
@@ -514,32 +507,7 @@ async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITT
 async function loginRHID(username, password) {
     let browser = null;
     try {
-        // Configurar Puppeteer para Render (com Chrome instalado)
-        const puppeteerOptions = {
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--disable-gpu'
-            ]
-        };
-        
-        // Se estiver no Render, tentar usar Chrome instalado
-        if (process.env.RENDER) {
-            // Puppeteer deve encontrar Chrome automaticamente após instalação
-            // Mas podemos forçar o caminho se necessário
-            const chromePath = process.env.CHROME_PATH || '/usr/bin/google-chrome-stable';
-            if (require('fs').existsSync(chromePath)) {
-                puppeteerOptions.executablePath = chromePath;
-            }
-        }
-        
-        browser = await puppeteer.launch(puppeteerOptions);
+        browser = await puppeteer.launch(getPuppeteerOptions());
         
         const page = await browser.newPage();
         
@@ -847,32 +815,7 @@ async function loginRHID(username, password) {
 async function fetchPersonList(cookies) {
     let browser = null;
     try {
-        // Configurar Puppeteer para Render (com Chrome instalado)
-        const puppeteerOptions = {
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--disable-gpu'
-            ]
-        };
-        
-        // Se estiver no Render, tentar usar Chrome instalado
-        if (process.env.RENDER) {
-            // Puppeteer deve encontrar Chrome automaticamente após instalação
-            // Mas podemos forçar o caminho se necessário
-            const chromePath = process.env.CHROME_PATH || '/usr/bin/google-chrome-stable';
-            if (require('fs').existsSync(chromePath)) {
-                puppeteerOptions.executablePath = chromePath;
-            }
-        }
-        
-        browser = await puppeteer.launch(puppeteerOptions);
+        browser = await puppeteer.launch(getPuppeteerOptions());
         
         const page = await browser.newPage();
         
@@ -1067,32 +1010,7 @@ async function fetchPersonList(cookies) {
 async function loginDoctorID(username, password) {
     let browser = null;
     try {
-        // Configurar Puppeteer para Render (com Chrome instalado)
-        const puppeteerOptions = {
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--disable-gpu'
-            ]
-        };
-        
-        // Se estiver no Render, tentar usar Chrome instalado
-        if (process.env.RENDER) {
-            // Puppeteer deve encontrar Chrome automaticamente após instalação
-            // Mas podemos forçar o caminho se necessário
-            const chromePath = process.env.CHROME_PATH || '/usr/bin/google-chrome-stable';
-            if (require('fs').existsSync(chromePath)) {
-                puppeteerOptions.executablePath = chromePath;
-            }
-        }
-        
-        browser = await puppeteer.launch(puppeteerOptions);
+        browser = await puppeteer.launch(getPuppeteerOptions());
         
         const page = await browser.newPage();
         
@@ -1930,32 +1848,7 @@ async function fetchGoogleSheetsFinanceiro() {
         console.log(`[GOOGLE SHEETS] URL: ${viewUrl}`);
         
         // Usar Puppeteer para acessar a planilha
-        // Configurar Puppeteer para Render (com Chrome instalado)
-        const puppeteerOptions = {
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--disable-gpu'
-            ]
-        };
-        
-        // Se estiver no Render, tentar usar Chrome instalado
-        if (process.env.RENDER) {
-            // Puppeteer deve encontrar Chrome automaticamente após instalação
-            // Mas podemos forçar o caminho se necessário
-            const chromePath = process.env.CHROME_PATH || '/usr/bin/google-chrome-stable';
-            if (require('fs').existsSync(chromePath)) {
-                puppeteerOptions.executablePath = chromePath;
-            }
-        }
-        
-        browser = await puppeteer.launch(puppeteerOptions);
+        browser = await puppeteer.launch(getPuppeteerOptions());
         
         const page = await browser.newPage();
         
