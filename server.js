@@ -208,12 +208,27 @@ async function updateFinanceiroCache() {
             throw new Error(`Resposta inválida do script Python: ${parseError.message}`);
         }
         
+        // Validar estrutura da resposta
+        if (!result || typeof result !== 'object') {
+            throw new Error('Resposta do script Python não é um objeto válido');
+        }
+        
+        // Garantir que tem a propriedade success
+        if (result.success === undefined) {
+            result.success = true; // Assumir sucesso se não especificado
+        }
+        
         // Salvar no cache
         cache.financeiro.data = result;
         cache.financeiro.timestamp = Date.now();
         cache.financeiro.updating = false;
         
         console.log('[CACHE] ✅ Cache financeiro atualizado com sucesso');
+        console.log('[CACHE] Estrutura do resultado:', {
+            success: result.success,
+            hasValores: !!result.valores,
+            hasMeses: !!(result.valores && result.valores.meses)
+        });
     } catch (error) {
         console.error('[CACHE] ❌ Erro ao atualizar cache financeiro:', error.message);
         cache.financeiro.updating = false;
@@ -2750,10 +2765,22 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
             console.log('[GOOGLE SHEETS] Valores extraídos:', JSON.stringify(result.valores, null, 2));
         }
         
+        // Validar estrutura da resposta
+        if (!result || typeof result !== 'object') {
+            throw new Error('Resposta do script Python não é um objeto válido');
+        }
+        
+        // Garantir que tem a propriedade success
+        if (result.success === undefined) {
+            result.success = true; // Assumir sucesso se não especificado
+        }
+        
         // Salvar no cache
         cache.financeiro.data = result;
         cache.financeiro.timestamp = Date.now();
         cache.financeiro.updating = false;
+        
+        console.log('[GOOGLE SHEETS] ✅ Dados salvos no cache');
         
         res.json({
             ...result,
