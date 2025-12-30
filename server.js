@@ -137,50 +137,105 @@ function getPuppeteerOptions() {
         ]
     };
     
-    // No Render, configurar cache path do Puppeteer
+    // No Render, tentar encontrar Chrome
     if (process.env.RENDER) {
-        // Render usa /opt/render/.cache/puppeteer
         const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
-        process.env.PUPPETEER_CACHE_DIR = cacheDir;
+        console.log(`[PUPPETEER] Procurando Chrome no Render (cache: ${cacheDir})...`);
         
-        console.log(`[PUPPETEER] Cache dir configurado: ${cacheDir}`);
+        // Lista de possíveis caminhos do Chrome
+        const possiblePaths = [];
         
-        // Tentar encontrar Chrome usando o Puppeteer
+        // 1. Caminho padrão do Puppeteer
         try {
             const puppeteer = require('puppeteer');
-            const executablePath = puppeteer.executablePath();
-            
-            if (executablePath && fs.existsSync(executablePath)) {
-                options.executablePath = executablePath;
-                console.log(`[PUPPETEER] ✅ Chrome encontrado em: ${executablePath}`);
-            } else {
-                // Tentar encontrar no cache do Puppeteer manualmente
-                try {
-                    if (fs.existsSync(cacheDir)) {
-                        const chromeDirs = fs.readdirSync(cacheDir);
-                        for (const dir of chromeDirs) {
-                            if (dir.startsWith('chrome')) {
-                                const chromePath = path.join(cacheDir, dir, 'chrome-linux', 'chrome');
-                                if (fs.existsSync(chromePath)) {
-                                    options.executablePath = chromePath;
-                                    console.log(`[PUPPETEER] ✅ Chrome encontrado no cache: ${chromePath}`);
-                                    break;
-                                }
-                            }
-                        }
+            const defaultPath = puppeteer.executablePath();
+            if (defaultPath) {
+                possiblePaths.push(defaultPath);
+                // Também tentar variações do caminho
+                possiblePaths.push(defaultPath.replace('/chrome-linux64/', '/chrome-linux/'));
+                possiblePaths.push(defaultPath.replace('/chrome-linux/', '/chrome-linux64/'));
+            }
+        } catch (err) {
+            console.warn(`[PUPPETEER] Erro ao obter caminho padrão: ${err.message}`);
+        }
+        
+        // 2. Procurar no cache do Puppeteer
+        if (fs.existsSync(cacheDir)) {
+            try {
+                const items = fs.readdirSync(cacheDir);
+                for (const item of items) {
+                    if (item.includes('chrome')) {
+                        // Tentar diferentes estruturas de diretório
+                        const paths = [
+                            path.join(cacheDir, item, 'chrome-linux', 'chrome'),
+                            path.join(cacheDir, item, 'chrome-linux64', 'chrome'),
+                            path.join(cacheDir, item, 'chrome', 'chrome'),
+                            path.join(cacheDir, item, 'chrome')
+                        ];
+                        possiblePaths.push(...paths);
                     }
-                } catch (err) {
-                    console.warn(`[PUPPETEER] Erro ao procurar Chrome no cache: ${err.message}`);
                 }
-                
-                // Se ainda não encontrou, usar o caminho padrão do Puppeteer
-                if (!options.executablePath && executablePath) {
-                    options.executablePath = executablePath;
-                    console.log(`[PUPPETEER] Tentando usar caminho padrão do Puppeteer: ${executablePath}`);
+            } catch (err) {
+                console.warn(`[PUPPETEER] Erro ao listar cache: ${err.message}`);
+            }
+        }
+        
+        // 3. Procurar recursivamente no cache
+        function findChromeRecursive(dir, depth = 0) {
+            if (depth > 3) return; // Limitar profundidade
+            try {
+                if (!fs.existsSync(dir)) return;
+                const items = fs.readdirSync(dir);
+                for (const item of items) {
+                    const fullPath = path.join(dir, item);
+                    const stat = fs.statSync(fullPath);
+                    if (stat.isDirectory()) {
+                        findChromeRecursive(fullPath, depth + 1);
+                    } else if (item === 'chrome' && stat.isFile()) {
+                        possiblePaths.push(fullPath);
+                    }
+                }
+            } catch (err) {
+                // Ignorar erros
+            }
+        }
+        
+        if (fs.existsSync(cacheDir)) {
+            findChromeRecursive(cacheDir);
+        }
+        
+        // 4. Tentar encontrar o primeiro caminho válido
+        let chromeFound = false;
+        for (const chromePath of possiblePaths) {
+            try {
+                if (chromePath && fs.existsSync(chromePath)) {
+                    const stat = fs.statSync(chromePath);
+                    if (stat.isFile()) {
+                        options.executablePath = chromePath;
+                        console.log(`[PUPPETEER] ✅ Chrome encontrado: ${chromePath}`);
+                        chromeFound = true;
+                        break;
+                    }
+                }
+            } catch (err) {
+                // Continuar procurando
+            }
+        }
+        
+        if (!chromeFound) {
+            console.error(`[PUPPETEER] ❌ Chrome não encontrado!`);
+            console.error(`[PUPPETEER] Caminhos testados: ${possiblePaths.slice(0, 5).join(', ')}...`);
+            console.error(`[PUPPETEER] Cache dir existe? ${fs.existsSync(cacheDir)}`);
+            if (fs.existsSync(cacheDir)) {
+                try {
+                    const items = fs.readdirSync(cacheDir);
+                    console.error(`[PUPPETEER] Itens no cache: ${items.join(', ')}`);
+                } catch (err) {
+                    console.error(`[PUPPETEER] Erro ao listar cache: ${err.message}`);
                 }
             }
-        } catch (error) {
-            console.error(`[PUPPETEER] Erro ao configurar: ${error.message}`);
+            // Não definir executablePath - deixar Puppeteer tentar encontrar automaticamente
+            console.warn(`[PUPPETEER] ⚠️ Tentando sem executablePath (Puppeteer tentará encontrar automaticamente)`);
         }
     }
     
