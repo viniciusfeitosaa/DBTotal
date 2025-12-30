@@ -80,13 +80,32 @@ Object.keys(CREDENTIALS).forEach(key => {
     }
 });
 
+// Em produção (Render), as credenciais vêm de variáveis de ambiente, não de .env
+const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER;
+
 if (missingCredentials.length > 0) {
-    console.error('⚠️  ERRO: Credenciais não configuradas no arquivo .env:');
-    missingCredentials.forEach(key => {
-        console.error(`   - ${key}`);
-    });
-    console.error('\n📝 Crie um arquivo .env baseado no .env.example e preencha as credenciais.');
-    process.exit(1);
+    if (isProduction) {
+        // Em produção, apenas avisar mas não bloquear o servidor
+        console.warn('⚠️  AVISO: Algumas credenciais não estão configuradas como variáveis de ambiente:');
+        missingCredentials.forEach(key => {
+            console.warn(`   - ${key}`);
+        });
+        console.warn('\n📝 Configure as variáveis de ambiente no painel do Render:');
+        missingCredentials.forEach(key => {
+            const envKey = key.toUpperCase().replace('-', '_');
+            console.warn(`   - ${envKey}_USERNAME`);
+            console.warn(`   - ${envKey}_PASSWORD`);
+        });
+        console.warn('\n⚠️  O servidor iniciará, mas os sistemas sem credenciais não funcionarão.');
+    } else {
+        // Em desenvolvimento, bloquear se não tiver .env
+        console.error('⚠️  ERRO: Credenciais não configuradas no arquivo .env:');
+        missingCredentials.forEach(key => {
+            console.error(`   - ${key}`);
+        });
+        console.error('\n📝 Crie um arquivo .env baseado no .env.example e preencha as credenciais.');
+        process.exit(1);
+    }
 }
 
 // Helper function para delay (substitui waitForTimeout que foi removido)
@@ -2268,6 +2287,14 @@ app.post('/api/check-login/:system', async (req, res) => {
         
         if (!creds) {
             return res.status(400).json({ error: 'Sistema não encontrado' });
+        }
+
+        // Verificar se as credenciais estão configuradas
+        if (!creds.username || !creds.password) {
+            return res.status(500).json({ 
+                error: 'Credenciais não configuradas',
+                message: `As credenciais para ${system} não estão configuradas. Configure as variáveis de ambiente ${system.toUpperCase().replace('-', '_')}_USERNAME e ${system.toUpperCase().replace('-', '_')}_PASSWORD no Render.`
+            });
         }
 
         let loginResult;

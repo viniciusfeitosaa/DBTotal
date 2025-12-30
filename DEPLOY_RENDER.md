@@ -28,9 +28,9 @@
 - **Build Command:** `npm install && pip install -r requirements.txt`
 - **Start Command:** `node server.js`
 
-### **3. Configurar Variáveis de Ambiente**
+### **3. Configurar Variáveis de Ambiente** ⚠️ **OBRIGATÓRIO**
 
-No painel do Render, vá em **"Environment"** e adicione:
+No painel do Render, vá em **"Environment"** (ou "Environment Variables") e adicione:
 
 #### **Variáveis Obrigatórias:**
 
@@ -39,7 +39,9 @@ NODE_ENV=production
 PORT=10000
 ```
 
-#### **Credenciais dos Sistemas:**
+#### **Credenciais dos Sistemas (OBRIGATÓRIAS):**
+
+⚠️ **SEM ESSAS CREDENCIAIS, O SERVIDOR NÃO FUNCIONARÁ!**
 
 ```env
 VIVA_SAUDE_USERNAME=seu_usuario_doctorid
@@ -52,6 +54,14 @@ DELTA_USERNAME=seu_usuario_rhid
 DELTA_PASSWORD=sua_senha_rhid
 ```
 
+**Como adicionar no Render:**
+1. No painel do serviço, clique em **"Environment"** no menu lateral
+2. Clique em **"Add Environment Variable"**
+3. Adicione cada variável uma por uma:
+   - **Key:** `VIVA_SAUDE_USERNAME`
+   - **Value:** `seu_usuario_real`
+4. Repita para todas as variáveis acima
+
 #### **URL do Frontend (Netlify):**
 
 ```env
@@ -59,7 +69,9 @@ FRONTEND_URL=https://seu-site.netlify.app
 NETLIFY_URL=https://seu-site.netlify.app
 ```
 
-⚠️ **IMPORTANTE:** Substitua `seu-site.netlify.app` pela URL real do seu site no Netlify!
+⚠️ **IMPORTANTE:** 
+- Substitua `seu-site.netlify.app` pela URL real do seu site no Netlify!
+- Essas variáveis são usadas para configurar CORS e permitir requisições do frontend
 
 ### **4. Configurar Plano**
 
