@@ -46,7 +46,18 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Id', 'X-Requested-With'],
+    allowedHeaders: [
+        'Content-Type', 
+        'Authorization', 
+        'X-Session-Id', 
+        'X-Requested-With',
+        'Cache-Control',
+        'Pragma',
+        'Accept',
+        'Accept-Language',
+        'User-Agent',
+        'ngrok-skip-browser-warning'
+    ],
     exposedHeaders: ['Content-Length', 'Content-Type'],
     maxAge: 86400 // 24 horas
 }));
