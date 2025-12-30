@@ -113,7 +113,7 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Helper function para configurar Puppeteer (compatível com Render)
 function getPuppeteerOptions() {
-    return {
+    const options = {
         headless: true,
         args: [
             '--no-sandbox',
@@ -127,6 +127,55 @@ function getPuppeteerOptions() {
             '--disable-software-rasterizer'
         ]
     };
+    
+    // No Render, configurar cache path do Puppeteer
+    if (process.env.RENDER) {
+        // Render usa /opt/render/.cache/puppeteer
+        const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+        process.env.PUPPETEER_CACHE_DIR = cacheDir;
+        
+        console.log(`[PUPPETEER] Cache dir configurado: ${cacheDir}`);
+        
+        // Tentar encontrar Chrome usando o Puppeteer
+        try {
+            const puppeteer = require('puppeteer');
+            const executablePath = puppeteer.executablePath();
+            
+            if (executablePath && fs.existsSync(executablePath)) {
+                options.executablePath = executablePath;
+                console.log(`[PUPPETEER] ✅ Chrome encontrado em: ${executablePath}`);
+            } else {
+                // Tentar encontrar no cache do Puppeteer manualmente
+                try {
+                    if (fs.existsSync(cacheDir)) {
+                        const chromeDirs = fs.readdirSync(cacheDir);
+                        for (const dir of chromeDirs) {
+                            if (dir.startsWith('chrome')) {
+                                const chromePath = path.join(cacheDir, dir, 'chrome-linux', 'chrome');
+                                if (fs.existsSync(chromePath)) {
+                                    options.executablePath = chromePath;
+                                    console.log(`[PUPPETEER] ✅ Chrome encontrado no cache: ${chromePath}`);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.warn(`[PUPPETEER] Erro ao procurar Chrome no cache: ${err.message}`);
+                }
+                
+                // Se ainda não encontrou, usar o caminho padrão do Puppeteer
+                if (!options.executablePath && executablePath) {
+                    options.executablePath = executablePath;
+                    console.log(`[PUPPETEER] Tentando usar caminho padrão do Puppeteer: ${executablePath}`);
+                }
+            }
+        } catch (error) {
+            console.error(`[PUPPETEER] Erro ao configurar: ${error.message}`);
+        }
+    }
+    
+    return options;
 }
 
 // Função para fazer login no RHID e exportar CSV (Coop Vitta e Delta)

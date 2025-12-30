@@ -6,7 +6,11 @@ services:
     name: dbtotal-backend
     env: node
     plan: free # ou starter ($7/mês) para melhor performance
-    buildCommand: npm install && npx puppeteer browsers install chrome && pip install -r requirements.txt
+    buildCommand: |
+      export PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer &&
+      npm install &&
+      npx puppeteer browsers install chrome &&
+      pip install -r requirements.txt
     startCommand: node server.js
     envVars:
       - key: NODE_ENV

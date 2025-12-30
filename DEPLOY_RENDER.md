@@ -27,10 +27,13 @@
 - **Runtime:** `Node`
 - **Build Command:** 
   ```bash
-  npm install && npx puppeteer browsers install chrome && pip install -r requirements.txt
+  export PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer && npm install && npx puppeteer browsers install chrome && pip install -r requirements.txt
   ```
   
-  ⚠️ **IMPORTANTE:** O comando `npx puppeteer browsers install chrome` baixa o Chrome automaticamente durante o build. Isso pode demorar alguns minutos.
+  ⚠️ **IMPORTANTE:** 
+  - O comando `npx puppeteer browsers install chrome` baixa o Chrome automaticamente durante o build
+  - A variável `PUPPETEER_CACHE_DIR` define onde o Chrome será armazenado
+  - Isso pode demorar alguns minutos (5-10 min)
 - **Start Command:** `node server.js`
 
 ### **3. Configurar Variáveis de Ambiente** ⚠️ **OBRIGATÓRIO**
