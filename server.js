@@ -1252,22 +1252,39 @@ async function loginDoctorID(username, password) {
         // Aguardar processamento do login
         console.log('[DOCTORID] Aguardando processamento do login...');
         try {
-            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 });
+            await page.waitForNavigation({ waitUntil: 'load', timeout: 60000 }); // Aumentado para 60s e mudado para 'load'
         } catch (e) {
-            await delay(2000);
+            console.log('[DOCTORID] ⚠️ Timeout aguardando navegação, verificando se login foi bem-sucedido...');
+            await delay(5000); // Aumentado para 5s
         }
 
-        // Verificar se login foi bem-sucedido
+        // Verificar se login foi bem-sucedido (com mais tempo e tentativas)
+        await delay(3000); // Aguardar mais um pouco para garantir que carregou
         const currentUrl = page.url();
-        console.log(`URL atual após login: ${currentUrl}`);
+        console.log(`[DOCTORID] URL atual após login: ${currentUrl}`);
         
-        const loginSuccess = await page.evaluate(() => {
-            const isLoginPage = window.location.href.includes('login');
-            const hasDashboard = document.querySelector('[class*="dashboard"], [class*="menu"], [id*="menu"]');
-            return !isLoginPage || hasDashboard !== null;
-        });
+        // Tentar verificar login múltiplas vezes (pode demorar para carregar)
+        let loginSuccess = false;
+        for (let i = 0; i < 3; i++) {
+            loginSuccess = await page.evaluate(() => {
+                const isLoginPage = window.location.href.includes('login');
+                const hasDashboard = document.querySelector('[class*="dashboard"], [class*="menu"], [id*="menu"], [class*="nav"]');
+                return !isLoginPage || hasDashboard !== null;
+            });
+            
+            if (loginSuccess) {
+                console.log(`[DOCTORID] ✅ Login verificado na tentativa ${i + 1}`);
+                break;
+            }
+            
+            if (i < 2) {
+                console.log(`[DOCTORID] ⚠️ Login não confirmado, aguardando mais... (tentativa ${i + 1}/3)`);
+                await delay(5000);
+            }
+        }
 
         if (!loginSuccess) {
+            console.log('[DOCTORID] ❌ Login não foi confirmado após múltiplas tentativas');
             await browser.close();
             return { success: false, cookies: [], data: null };
         }
