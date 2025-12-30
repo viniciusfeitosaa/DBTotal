@@ -120,6 +120,45 @@ if (missingCredentials.length > 0) {
 // Helper function para delay (substitui waitForTimeout que foi removido)
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Função para instalar Chrome se não encontrado (apenas no Render)
+async function ensureChromeInstalled() {
+    if (!process.env.RENDER) return; // Apenas no Render
+    
+    const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+    const puppeteer = require('puppeteer');
+    
+    try {
+        const executablePath = puppeteer.executablePath();
+        if (executablePath && fs.existsSync(executablePath)) {
+            console.log(`[PUPPETEER] Chrome já instalado: ${executablePath}`);
+            return executablePath;
+        }
+    } catch (err) {
+        // Continuar
+    }
+    
+    console.log(`[PUPPETEER] Chrome não encontrado, tentando instalar...`);
+    try {
+        const { execSync } = require('child_process');
+        execSync('npx puppeteer browsers install chrome', { 
+            stdio: 'inherit',
+            env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir },
+            timeout: 300000 // 5 minutos
+        });
+        console.log(`[PUPPETEER] ✅ Chrome instalado com sucesso`);
+        
+        // Verificar novamente
+        const newPath = puppeteer.executablePath();
+        if (newPath && fs.existsSync(newPath)) {
+            return newPath;
+        }
+    } catch (err) {
+        console.error(`[PUPPETEER] ❌ Erro ao instalar Chrome: ${err.message}`);
+    }
+    
+    return null;
+}
+
 // Helper function para configurar Puppeteer (compatível com Render)
 function getPuppeteerOptions() {
     const options = {
