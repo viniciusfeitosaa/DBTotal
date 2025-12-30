@@ -14,32 +14,41 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Configurar CORS para aceitar requisições do Netlify e localhost
-const allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:8888',
-    process.env.NETLIFY_URL, // URL do Netlify (será configurada como variável de ambiente)
-    process.env.FRONTEND_URL // URL alternativa do frontend
-].filter(Boolean); // Remove valores undefined/null
-
 app.use(cors({
     origin: function (origin, callback) {
         // Permitir requisições sem origin (mobile apps, Postman, etc)
-        if (!origin) return callback(null, true);
+        if (!origin) {
+            console.log('[CORS] Requisição sem origin, permitindo');
+            return callback(null, true);
+        }
         
-        // Se a origem está na lista permitida ou é localhost
-        if (allowedOrigins.some(allowed => origin.includes(allowed.replace(/^https?:\/\//, ''))) || 
-            origin.includes('localhost') || 
-            origin.includes('127.0.0.1') ||
-            origin.includes('.netlify.app')) {
+        console.log(`[CORS] Verificando origem: ${origin}`);
+        
+        // Lista de origens permitidas
+        const allowedPatterns = [
+            'localhost',
+            '127.0.0.1',
+            '.netlify.app',
+            'dashboardmonitor.netlify.app' // URL específica do Netlify
+        ];
+        
+        // Verificar se a origem corresponde a algum padrão permitido
+        const isAllowed = allowedPatterns.some(pattern => origin.includes(pattern));
+        
+        if (isAllowed) {
+            console.log(`[CORS] ✅ Origem permitida: ${origin}`);
             callback(null, true);
         } else {
-            console.log(`[CORS] Origem bloqueada: ${origin}`);
-            callback(null, true); // Permitir todas por enquanto (ajustar em produção se necessário)
+            // Em produção, permitir todas as origens por enquanto (ajustar se necessário)
+            console.log(`[CORS] ⚠️ Origem não na lista, mas permitindo: ${origin}`);
+            callback(null, true);
         }
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Id']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Id', 'X-Requested-With'],
+    exposedHeaders: ['Content-Length', 'Content-Type'],
+    maxAge: 86400 // 24 horas
 }));
 app.use(express.json());
 app.use(express.static('.'));
