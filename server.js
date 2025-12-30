@@ -168,8 +168,47 @@ async function updateFinanceiroCache() {
     
     try {
         console.log('[CACHE] Atualizando cache financeiro em background...');
-        const result = await fetchGoogleSheetsFinanceiro();
         
+        // Executar script Python (mesma lógica do endpoint)
+        const scriptPath = path.join(__dirname, 'google_sheets_extractor.py');
+        const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+        const fullCommand = `"${pythonCommand}" "${scriptPath}"`;
+        
+        console.log(`[CACHE] Executando: ${fullCommand}`);
+        
+        const { stdout, stderr } = await Promise.race([
+            execAsync(fullCommand, {
+                maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+                timeout: 600000, // 10 minutos timeout
+                cwd: __dirname,
+                env: {
+                    ...process.env,
+                    PYTHONUNBUFFERED: '1'
+                }
+            }),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Timeout: Script Python demorou mais de 3 minutos')), 180000)
+            )
+        ]);
+        
+        // Parsear resultado JSON
+        let result;
+        try {
+            const stdoutClean = stdout.trim();
+            const jsonMatch = stdoutClean.match(/\{[\s\S]*\}/);
+            const jsonString = jsonMatch ? jsonMatch[0] : stdoutClean;
+            
+            if (!jsonString || jsonString.length < 10) {
+                throw new Error('JSON não encontrado no stdout');
+            }
+            
+            result = JSON.parse(jsonString);
+        } catch (parseError) {
+            console.error('[CACHE] Erro ao parsear JSON:', parseError.message);
+            throw new Error(`Resposta inválida do script Python: ${parseError.message}`);
+        }
+        
+        // Salvar no cache
         cache.financeiro.data = result;
         cache.financeiro.timestamp = Date.now();
         cache.financeiro.updating = false;
@@ -178,6 +217,7 @@ async function updateFinanceiroCache() {
     } catch (error) {
         console.error('[CACHE] ❌ Erro ao atualizar cache financeiro:', error.message);
         cache.financeiro.updating = false;
+        // Não lançar erro, apenas logar - manter cache antigo se houver
     }
 }
 
