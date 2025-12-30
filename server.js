@@ -309,7 +309,7 @@ async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITT
         console.log(`[${systemName}] Acessando página de login...`);
         await page.goto('https://rhid.com.br/v2/#/login', {
             waitUntil: 'domcontentloaded',
-            timeout: 20000
+            timeout: 60000 // Aumentado para 60s (Render é mais lento)
         });
 
         await delay(1000);
@@ -389,7 +389,7 @@ async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITT
         console.log(`[${systemName}] Navegando para página de listagem de pessoas...`);
         await page.goto('https://rhid.com.br/v2/#/list/person', {
             waitUntil: 'domcontentloaded',
-            timeout: 20000
+            timeout: 60000 // Aumentado para 60s (Render é mais lento)
         });
 
         // Aguardar página carregar (reduzido)
@@ -890,8 +890,8 @@ async function loginRHID(username, password) {
         try {
             // Aguardar navegação ou mudança de URL
             await Promise.race([
-                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }),
-                page.waitForFunction(() => !window.location.href.includes('login'), { timeout: 10000 })
+                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
+                page.waitForFunction(() => !window.location.href.includes('login'), { timeout: 30000 })
             ]);
         } catch (e) {
             // Se não houver navegação, aguardar um pouco para o JavaScript processar
@@ -983,7 +983,7 @@ async function fetchPersonList(cookies) {
         // Acessar página de listagem de pessoas
         await page.goto('https://rhid.com.br/v2/#/list/person', {
             waitUntil: 'domcontentloaded',
-            timeout: 20000
+            timeout: 60000 // Aumentado para 60s (Render é mais lento)
         });
 
         // Aguardar um pouco para o Angular renderizar (reduzido)
@@ -1175,7 +1175,7 @@ async function loginDoctorID(username, password) {
         console.log('[DOCTORID] Acessando página de login (website)...');
         await page.goto('https://www.doctorid.com.br/website', {
             waitUntil: 'domcontentloaded',
-            timeout: 20000
+            timeout: 60000 // Aumentado para 60s (Render é mais lento)
         });
 
         await delay(1000);
@@ -1241,7 +1241,7 @@ async function loginDoctorID(username, password) {
         // Aguardar processamento do login
         console.log('[DOCTORID] Aguardando processamento do login...');
         try {
-            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 });
+            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 });
         } catch (e) {
             await delay(2000);
         }
@@ -1268,7 +1268,7 @@ async function loginDoctorID(username, password) {
         try {
             await page.goto('https://www.doctorid.com.br/#personGroupCompany', {
                 waitUntil: 'domcontentloaded',
-                timeout: 20000
+                timeout: 60000 // Aumentado para 60s (Render é mais lento)
             });
             console.log('[DOCTORID] Navegação para /#personGroupCompany concluída');
         } catch (e) {
@@ -1687,7 +1687,7 @@ async function loginDoctorID(username, password) {
         // Aguardar processamento após pressionar Enter
         console.log('[DOCTORID] Aguardando processamento após pressionar Enter...');
         try {
-            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
+            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 });
             console.log('[DOCTORID] ✅ Página carregada após filtrar');
         } catch (e) {
             await delay(2000);
@@ -2360,7 +2360,7 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
         const { stdout, stderr } = await Promise.race([
             execAsync(fullCommand, {
                 maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-                timeout: 180000, // 3 minutos timeout
+                timeout: 300000, // 5 minutos timeout (Render é mais lento)
                 cwd: __dirname, // Executar no diretório do projeto
                 env: {
                     ...process.env,
