@@ -18,6 +18,25 @@ console.log('[CONFIG] Ambiente:', isProduction ? 'PRODUÇÃO' : 'DESENVOLVIMENTO
 console.log('[CONFIG] API Base URL:', API_BASE_URL);
 console.log('[CONFIG] Hostname:', window.location.hostname);
 
+// Função helper para fazer fetch com headers do ngrok
+function fetchWithNgrokHeaders(url, options = {}) {
+    const defaultHeaders = {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true', // Bypass do interstício do ngrok
+        'User-Agent': 'Mozilla/5.0' // Evitar bloqueio do ngrok
+    };
+    
+    const mergedOptions = {
+        ...options,
+        headers: {
+            ...defaultHeaders,
+            ...(options.headers || {})
+        }
+    };
+    
+    return fetch(url, mergedOptions);
+}
+
 // Configuração dos sistemas
 const systems = {
     'viva-saude': {
@@ -47,7 +66,7 @@ async function fetchFinanceiroVivaSaude() {
         const url = `${API_BASE_URL}/financeiro/viva-saude`;
         console.log('[FETCH] Buscando dados financeiros:', url);
         
-        const response = await fetch(url);
+        const response = await fetchWithNgrokHeaders(url);
         
         if (!response.ok) {
             console.error('[FETCH] Erro na resposta:', response.status, response.statusText);
@@ -602,7 +621,7 @@ async function checkServerHealth() {
         const url = `${API_BASE_URL}/health`;
         console.log('[HEALTH] Verificando saúde do servidor:', url);
         
-        const response = await fetch(url);
+        const response = await fetchWithNgrokHeaders(url);
         
         if (response.ok) {
             const data = await response.json();
@@ -678,11 +697,8 @@ async function checkLogin(systemKey) {
         const url = `${API_BASE_URL}${system.apiEndpoint}`;
         console.log(`[LOGIN] Verificando login ${systemKey}:`, url);
         
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+        const response = await fetchWithNgrokHeaders(url, {
+            method: 'POST'
         });
 
         if (!response.ok) {
