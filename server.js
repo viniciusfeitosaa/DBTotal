@@ -120,43 +120,48 @@ if (missingCredentials.length > 0) {
 // Helper function para delay (substitui waitForTimeout que foi removido)
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Função para instalar Chrome se não encontrado (apenas no Render)
-async function ensureChromeInstalled() {
-    if (!process.env.RENDER) return; // Apenas no Render
-    
-    const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+// Função wrapper para lançar Puppeteer com instalação automática do Chrome se necessário
+async function launchPuppeteer() {
     const puppeteer = require('puppeteer');
+    const options = getPuppeteerOptions();
     
-    try {
-        const executablePath = puppeteer.executablePath();
-        if (executablePath && fs.existsSync(executablePath)) {
-            console.log(`[PUPPETEER] Chrome já instalado: ${executablePath}`);
-            return executablePath;
+    // No Render, verificar se Chrome está instalado
+    if (process.env.RENDER) {
+        try {
+            const executablePath = puppeteer.executablePath();
+            if (!executablePath || !fs.existsSync(executablePath)) {
+                console.log(`[PUPPETEER] Chrome não encontrado, tentando instalar...`);
+                const { execSync } = require('child_process');
+                const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+                
+                try {
+                    execSync('npx puppeteer browsers install chrome', { 
+                        stdio: 'pipe',
+                        env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir },
+                        timeout: 300000 // 5 minutos
+                    });
+                    console.log(`[PUPPETEER] ✅ Chrome instalado com sucesso`);
+                    
+                    // Atualizar caminho após instalação
+                    const newPath = puppeteer.executablePath();
+                    if (newPath && fs.existsSync(newPath)) {
+                        options.executablePath = newPath;
+                        console.log(`[PUPPETEER] Usando Chrome recém-instalado: ${newPath}`);
+                    }
+                } catch (err) {
+                    console.error(`[PUPPETEER] ⚠️ Erro ao instalar Chrome: ${err.message}`);
+                    console.log(`[PUPPETEER] Tentando continuar sem especificar executablePath...`);
+                }
+            } else {
+                options.executablePath = executablePath;
+                console.log(`[PUPPETEER] ✅ Chrome encontrado: ${executablePath}`);
+            }
+        } catch (err) {
+            console.warn(`[PUPPETEER] ⚠️ Erro ao verificar Chrome: ${err.message}`);
         }
-    } catch (err) {
-        // Continuar
     }
     
-    console.log(`[PUPPETEER] Chrome não encontrado, tentando instalar...`);
-    try {
-        const { execSync } = require('child_process');
-        execSync('npx puppeteer browsers install chrome', { 
-            stdio: 'inherit',
-            env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir },
-            timeout: 300000 // 5 minutos
-        });
-        console.log(`[PUPPETEER] ✅ Chrome instalado com sucesso`);
-        
-        // Verificar novamente
-        const newPath = puppeteer.executablePath();
-        if (newPath && fs.existsSync(newPath)) {
-            return newPath;
-        }
-    } catch (err) {
-        console.error(`[PUPPETEER] ❌ Erro ao instalar Chrome: ${err.message}`);
-    }
-    
-    return null;
+    return await puppeteer.launch(options);
 }
 
 // Helper function para configurar Puppeteer (compatível com Render)
@@ -286,7 +291,7 @@ async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITT
     let browser = null;
     try {
         // Configurar cliente do Puppeteer com download
-        browser = await puppeteer.launch(getPuppeteerOptions());
+        browser = await launchPuppeteer();
         
         const context = browser.defaultBrowserContext();
         await context.overridePermissions('https://rhid.com.br', []);
@@ -659,7 +664,7 @@ async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITT
 async function loginRHID(username, password) {
     let browser = null;
     try {
-        browser = await puppeteer.launch(getPuppeteerOptions());
+        browser = await launchPuppeteer();
         
         const page = await browser.newPage();
         
@@ -967,7 +972,7 @@ async function loginRHID(username, password) {
 async function fetchPersonList(cookies) {
     let browser = null;
     try {
-        browser = await puppeteer.launch(getPuppeteerOptions());
+        browser = await launchPuppeteer();
         
         const page = await browser.newPage();
         
@@ -1162,7 +1167,7 @@ async function fetchPersonList(cookies) {
 async function loginDoctorID(username, password) {
     let browser = null;
     try {
-        browser = await puppeteer.launch(getPuppeteerOptions());
+        browser = await launchPuppeteer();
         
         const page = await browser.newPage();
         
@@ -2000,7 +2005,7 @@ async function fetchGoogleSheetsFinanceiro() {
         console.log(`[GOOGLE SHEETS] URL: ${viewUrl}`);
         
         // Usar Puppeteer para acessar a planilha
-        browser = await puppeteer.launch(getPuppeteerOptions());
+        browser = await launchPuppeteer();
         
         const page = await browser.newPage();
         
