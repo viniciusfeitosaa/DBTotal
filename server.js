@@ -2360,7 +2360,7 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
         const { stdout, stderr } = await Promise.race([
             execAsync(fullCommand, {
                 maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-                timeout: 300000, // 5 minutos timeout (Render é mais lento)
+                timeout: 600000, // 10 minutos timeout (Render é muito lento e Google Sheets pode demorar)
                 cwd: __dirname, // Executar no diretório do projeto
                 env: {
                     ...process.env,
@@ -2441,16 +2441,28 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
 
 // Rota para verificar login de um sistema específico
 app.post('/api/check-login/:system', async (req, res) => {
+    // Timeout de 3 minutos para evitar que a requisição trave
+    const timeout = setTimeout(() => {
+        if (!res.headersSent) {
+            res.status(504).json({ 
+                error: 'Timeout',
+                message: 'A requisição demorou mais de 3 minutos. O servidor pode estar sobrecarregado.'
+            });
+        }
+    }, 180000); // 3 minutos
+
     try {
         const { system } = req.params;
         const creds = CREDENTIALS[system];
         
         if (!creds) {
+            clearTimeout(timeout);
             return res.status(400).json({ error: 'Sistema não encontrado' });
         }
 
         // Verificar se as credenciais estão configuradas
         if (!creds.username || !creds.password) {
+            clearTimeout(timeout);
             return res.status(500).json({ 
                 error: 'Credenciais não configuradas',
                 message: `As credenciais para ${system} não estão configuradas. Configure as variáveis de ambiente ${system.toUpperCase().replace('-', '_')}_USERNAME e ${system.toUpperCase().replace('-', '_')}_PASSWORD no Render.`
@@ -2471,9 +2483,11 @@ app.post('/api/check-login/:system', async (req, res) => {
         } else if (creds.system === 'doctorid') {
             loginResult = await loginDoctorID(creds.username, creds.password);
         } else {
+            clearTimeout(timeout);
             return res.status(400).json({ error: 'Sistema não suportado' });
         }
 
+        clearTimeout(timeout);
         res.json({
             success: loginResult.success !== false,
             message: loginResult.success !== false ? 'Login bem-sucedido' : 'Falha no login',
@@ -2481,8 +2495,14 @@ app.post('/api/check-login/:system', async (req, res) => {
             data: loginResult.data || null
         });
     } catch (error) {
+        clearTimeout(timeout);
         console.error('Erro ao verificar login:', error);
-        res.status(500).json({ error: error.message });
+        if (!res.headersSent) {
+            res.status(500).json({ 
+                error: error.message,
+                details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            });
+        }
     }
 });
 
