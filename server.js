@@ -1173,10 +1173,21 @@ async function loginDoctorID(username, password) {
         
         // Acessar página de login do website
         console.log('[DOCTORID] Acessando página de login (website)...');
-        await page.goto('https://www.doctorid.com.br/website', {
-            waitUntil: 'domcontentloaded',
-            timeout: 60000 // Aumentado para 60s (Render é mais lento)
-        });
+        try {
+            await page.goto('https://www.doctorid.com.br/website', {
+                waitUntil: 'load', // Mais permissivo que domcontentloaded
+                timeout: 120000 // Aumentado para 120s (DoctorID pode demorar muito)
+            });
+        } catch (error) {
+            console.log('[DOCTORID] ⚠️ Timeout no goto, tentando continuar...');
+            // Tentar aguardar um pouco e verificar se a página carregou
+            await delay(5000);
+            const currentUrl = page.url();
+            console.log(`[DOCTORID] URL atual após timeout: ${currentUrl}`);
+            if (!currentUrl.includes('doctorid.com.br')) {
+                throw new Error('Página não carregou após timeout');
+            }
+        }
 
         await delay(3000); // Aumentado para 3s (Render é mais lento)
 
@@ -1267,16 +1278,22 @@ async function loginDoctorID(username, password) {
         console.log('[DOCTORID] Navegando para página personGroupCompany...');
         try {
             await page.goto('https://www.doctorid.com.br/#personGroupCompany', {
-                waitUntil: 'domcontentloaded',
-                timeout: 60000 // Aumentado para 60s (Render é mais lento)
+                waitUntil: 'load', // Mais permissivo que domcontentloaded
+                timeout: 120000 // Aumentado para 120s
             });
             console.log('[DOCTORID] Navegação para /#personGroupCompany concluída');
         } catch (e) {
-            console.log('[DOCTORID] Erro ao navegar, tentando via hash...');
-            await page.evaluate(() => {
-                window.location.hash = '#personGroupCompany';
-            });
-            await delay(2000);
+            console.log('[DOCTORID] ⚠️ Erro ao navegar, tentando via hash...');
+            try {
+                await page.evaluate(() => {
+                    window.location.hash = '#personGroupCompany';
+                });
+                await delay(5000); // Aumentado para 5s
+                console.log('[DOCTORID] ✅ Navegação via hash concluída');
+            } catch (hashError) {
+                console.log('[DOCTORID] ⚠️ Erro ao navegar via hash, continuando mesmo assim...');
+                await delay(5000);
+            }
         }
 
         // Aguardar JavaScript/Angular renderizar (reduzido)
