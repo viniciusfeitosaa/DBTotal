@@ -1178,7 +1178,7 @@ async function loginDoctorID(username, password) {
             timeout: 60000 // Aumentado para 60s (Render é mais lento)
         });
 
-        await delay(1000);
+        await delay(3000); // Aumentado para 3s (Render é mais lento)
 
         // Preencher credenciais usando os campos específicos
         console.log('[DOCTORID] Preenchendo credenciais...');
@@ -1314,7 +1314,7 @@ async function loginDoctorID(username, password) {
         console.log('[DOCTORID] Aguardando elemento filtroComplexo_selecionar aparecer...');
         await page.waitForSelector('.filtroComplexo_selecionar', { timeout: 30000, visible: true }); // Aumentado para 30s
         console.log('[DOCTORID] ✅ Elemento filtroComplexo_selecionar encontrado');
-        await delay(1000);
+        await delay(2000); // Aumentado para 2s (Render é mais lento)
         
         // Identificar o select dentro do filtroComplexo_selecionar
         console.log('[DOCTORID] Identificando select de tipo de filtro...');
