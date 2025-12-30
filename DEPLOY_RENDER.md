@@ -25,7 +25,12 @@
 - **Branch:** `main`
 - **Root Directory:** Deixe vazio (raiz do projeto)
 - **Runtime:** `Node`
-- **Build Command:** `npm install && pip install -r requirements.txt`
+- **Build Command:** 
+  ```bash
+  npm install && npx puppeteer browsers install chrome && pip install -r requirements.txt
+  ```
+  
+  ⚠️ **IMPORTANTE:** O comando `npx puppeteer browsers install chrome` baixa o Chrome automaticamente durante o build. Isso pode demorar alguns minutos.
 - **Start Command:** `node server.js`
 
 ### **3. Configurar Variáveis de Ambiente** ⚠️ **OBRIGATÓRIO**
