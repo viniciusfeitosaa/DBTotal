@@ -73,6 +73,177 @@ if (!fs.existsSync(downloadsDir)) {
 // Armazenar sessões (em produção, use Redis ou similar)
 const sessions = new Map();
 
+// Sistema de Cache para pré-carregar dados no servidor
+const cache = {
+    // Cache de logins por sistema (cada sistema tem seu próprio cache)
+    logins: new Map(), // { 'viva-saude': { data, timestamp }, 'coop-vitta': { data, timestamp }, 'delta': { data, timestamp } }
+    // Cache de dados financeiros
+    financeiro: {
+        data: null,
+        timestamp: null
+    },
+    // Configuração
+    config: {
+        TTL_LOGINS: 5 * 60 * 1000, // 5 minutos para logins
+        TTL_FINANCEIRO: 10 * 60 * 1000, // 10 minutos para financeiro
+        UPDATE_INTERVAL: 4 * 60 * 1000 // Atualizar a cada 4 minutos
+    }
+};
+
+// Função para verificar se cache está válido
+function isCacheValid(timestamp, ttl) {
+    if (!timestamp) return false;
+    return (Date.now() - timestamp) < ttl;
+}
+
+// Função para atualizar cache de um sistema específico em background
+async function updateSystemCache(system) {
+    try {
+        console.log(`[CACHE] Atualizando cache de ${system} em background...`);
+        const creds = CREDENTIALS[system];
+        
+        if (!creds || !creds.username || !creds.password) {
+            console.log(`[CACHE] Credenciais não configuradas para ${system}`);
+            return;
+        }
+        
+        let loginResult;
+        
+        if (creds.system === 'rhid') {
+            if (system === 'coop-vitta' || system === 'delta') {
+                const systemName = system === 'coop-vitta' ? 'COOP-VITTA' : 'DELTA';
+                loginResult = await loginRHIDAndExportCSV(creds.username, creds.password, systemName);
+            } else {
+                loginResult = await loginRHID(creds.username, creds.password);
+            }
+        } else if (creds.system === 'doctorid') {
+            loginResult = await loginDoctorID(creds.username, creds.password);
+        }
+        
+        // Salvar no cache com chave específica do sistema
+        const cacheData = {
+            success: loginResult.success !== false,
+            message: loginResult.success !== false ? 'Login bem-sucedido' : 'Falha no login',
+            system: creds.system,
+            systemKey: system, // Garantir que sabemos qual sistema é
+            data: loginResult.data || null
+        };
+        
+        cache.logins.set(system, {
+            data: cacheData,
+            timestamp: Date.now()
+        });
+        
+        // Log detalhado para garantir diferenciação
+        const registros = loginResult.data?.total || loginResult.data?.registros || 'N/A';
+        console.log(`[CACHE] ✅ Cache de ${system} atualizado: ${registros} registros`);
+        console.log(`[CACHE] Sistema: ${creds.system}, Chave: ${system}`);
+    } catch (error) {
+        console.error(`[CACHE] ❌ Erro ao atualizar cache de ${system}:`, error.message);
+    }
+}
+
+// Função para atualizar cache financeiro em background
+async function updateFinanceiroCache() {
+    try {
+        console.log('[CACHE] Atualizando cache financeiro em background...');
+        
+        const scriptPath = path.join(__dirname, 'google_sheets_extractor.py');
+        const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+        const fullCommand = `"${pythonCommand}" "${scriptPath}"`;
+        
+        const { stdout, stderr } = await Promise.race([
+            execAsync(fullCommand, {
+                maxBuffer: 10 * 1024 * 1024,
+                timeout: 600000,
+                cwd: __dirname,
+                env: {
+                    ...process.env,
+                    PYTHONUNBUFFERED: '1'
+                }
+            }),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Timeout: Script Python demorou mais de 3 minutos')), 180000)
+            )
+        ]);
+        
+        let result;
+        try {
+            const stdoutClean = stdout.trim();
+            const jsonMatch = stdoutClean.match(/\{[\s\S]*\}/);
+            const jsonString = jsonMatch ? jsonMatch[0] : stdoutClean;
+            
+            if (!jsonString || jsonString.length < 10) {
+                throw new Error('JSON não encontrado no stdout');
+            }
+            
+            result = JSON.parse(jsonString);
+        } catch (parseError) {
+            console.error('[CACHE] Erro ao parsear JSON:', parseError.message);
+            throw new Error(`Resposta inválida do script Python: ${parseError.message}`);
+        }
+        
+        if (!result || typeof result !== 'object') {
+            throw new Error('Resposta do script Python não é um objeto válido');
+        }
+        
+        if (result.success === undefined) {
+            result.success = true;
+        }
+        
+        cache.financeiro.data = result;
+        cache.financeiro.timestamp = Date.now();
+        
+        console.log('[CACHE] ✅ Cache financeiro atualizado com sucesso');
+    } catch (error) {
+        console.error('[CACHE] ❌ Erro ao atualizar cache financeiro:', error.message);
+    }
+}
+
+// Iniciar atualização automática em background
+function startBackgroundUpdates() {
+    console.log('[CACHE] Iniciando pré-carregamento automático de dados...');
+    
+    // Atualizar todos os sistemas periodicamente
+    setInterval(() => {
+        console.log('[CACHE] Iniciando ciclo de atualização automática...');
+        
+        // Atualizar cada sistema individualmente
+        Object.keys(CREDENTIALS).forEach(system => {
+            const cached = cache.logins.get(system);
+            // Atualizar se não há cache ou se está próximo de expirar
+            if (!cached || !isCacheValid(cached.timestamp, cache.config.TTL_LOGINS - cache.config.UPDATE_INTERVAL)) {
+                updateSystemCache(system).catch(err => {
+                    console.error(`[CACHE] Erro ao atualizar ${system}:`, err.message);
+                });
+            }
+        });
+        
+        // Atualizar financeiro
+        if (!cache.financeiro.data || !isCacheValid(cache.financeiro.timestamp, cache.config.TTL_FINANCEIRO - cache.config.UPDATE_INTERVAL)) {
+            updateFinanceiroCache().catch(err => {
+                console.error('[CACHE] Erro ao atualizar financeiro:', err.message);
+            });
+        }
+    }, cache.config.UPDATE_INTERVAL);
+    
+    // Atualização inicial imediata (após 10 segundos do servidor iniciar)
+    setTimeout(() => {
+        console.log('[CACHE] Executando pré-carregamento inicial...');
+        Object.keys(CREDENTIALS).forEach(system => {
+            updateSystemCache(system).catch(err => {
+                console.error(`[CACHE] Erro no pré-carregamento inicial de ${system}:`, err.message);
+            });
+        });
+        updateFinanceiroCache().catch(err => {
+            console.error('[CACHE] Erro no pré-carregamento inicial financeiro:', err.message);
+        });
+    }, 10000); // 10 segundos após iniciar
+}
+
+// Iniciar pré-carregamento em background
+startBackgroundUpdates();
+
 // Credenciais carregadas do arquivo .env
 const CREDENTIALS = {
     'viva-saude': {
@@ -2443,6 +2614,30 @@ async function fetchGoogleSheetsFinanceiro() {
 
 // Rota para buscar dados financeiros do Google Sheets (usando Python)
 app.get('/api/financeiro/viva-saude', async (req, res) => {
+    // Verificar cache primeiro
+    if (cache.financeiro.data && isCacheValid(cache.financeiro.timestamp, cache.config.TTL_FINANCEIRO)) {
+        console.log(`[CACHE] ✅ Retornando dados financeiros do cache (${Math.round((Date.now() - cache.financeiro.timestamp) / 1000)}s atrás)`);
+        return res.json({
+            ...cache.financeiro.data,
+            cached: true
+        });
+    }
+    
+    // Se não há cache válido, atualizar em background e retornar cache antigo se houver
+    if (cache.financeiro.data) {
+        console.log(`[CACHE] ⚡ Cache expirado, retornando dados antigos enquanto atualiza...`);
+        // Atualizar em background
+        updateFinanceiroCache().catch(err => {
+            console.error('[CACHE] Erro ao atualizar em background:', err.message);
+        });
+        return res.json({
+            ...cache.financeiro.data,
+            cached: true,
+            updating: true
+        });
+    }
+    
+    // Se não há cache, fazer requisição síncrona (primeira vez)
     let pythonProcess = null;
     try {
         console.log('[GOOGLE SHEETS] Iniciando extração via Python...');
@@ -2524,7 +2719,14 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
             console.log('[GOOGLE SHEETS] Valores extraídos:', JSON.stringify(result.valores, null, 2));
         }
         
-        res.json(result);
+        // Salvar no cache
+        cache.financeiro.data = result;
+        cache.financeiro.timestamp = Date.now();
+        
+        res.json({
+            ...result,
+            cached: false
+        });
     } catch (error) {
         console.error('[GOOGLE SHEETS] Erro ao executar script Python:', error.message);
         console.error('[GOOGLE SHEETS] Tipo de erro:', error.constructor.name);
@@ -2545,62 +2747,103 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
 
 // Rota para verificar login de um sistema específico
 app.post('/api/check-login/:system', async (req, res) => {
-    // Timeout de 3 minutos para evitar que a requisição trave
-    const timeout = setTimeout(() => {
-        if (!res.headersSent) {
-            res.status(504).json({ 
-                error: 'Timeout',
-                message: 'A requisição demorou mais de 3 minutos. O servidor pode estar sobrecarregado.'
-            });
-        }
-    }, 180000); // 3 minutos
-
     try {
         const { system } = req.params;
         const creds = CREDENTIALS[system];
         
         if (!creds) {
-            clearTimeout(timeout);
             return res.status(400).json({ error: 'Sistema não encontrado' });
         }
 
         // Verificar se as credenciais estão configuradas
         if (!creds.username || !creds.password) {
-            clearTimeout(timeout);
             return res.status(500).json({ 
                 error: 'Credenciais não configuradas',
                 message: `As credenciais para ${system} não estão configuradas. Configure as variáveis de ambiente ${system.toUpperCase().replace('-', '_')}_USERNAME e ${system.toUpperCase().replace('-', '_')}_PASSWORD no Render.`
             });
         }
 
+        // Verificar cache primeiro (cada sistema tem seu próprio cache)
+        const cached = cache.logins.get(system);
+        if (cached && isCacheValid(cached.timestamp, cache.config.TTL_LOGINS)) {
+            console.log(`[CACHE] ✅ Retornando dados do cache para ${system} (${Math.round((Date.now() - cached.timestamp) / 1000)}s atrás)`);
+            // Verificar se os dados são do sistema correto
+            if (cached.data.systemKey === system) {
+                return res.json({
+                    ...cached.data,
+                    cached: true
+                });
+            } else {
+                console.log(`[CACHE] ⚠️ Cache de ${system} tem systemKey incorreto, limpando...`);
+                cache.logins.delete(system);
+            }
+        }
+
+        // Se não há cache válido, atualizar em background e retornar cache antigo se houver
+        if (cached) {
+            console.log(`[CACHE] ⚡ Cache expirado para ${system}, retornando dados antigos enquanto atualiza...`);
+            // Atualizar em background
+            updateSystemCache(system).catch(err => {
+                console.error(`[CACHE] Erro ao atualizar ${system} em background:`, err.message);
+            });
+            return res.json({
+                ...cached.data,
+                cached: true,
+                updating: true
+            });
+        }
+
+        // Se não há cache, fazer requisição síncrona (primeira vez)
+        console.log(`[CACHE] ⏳ Buscando dados frescos para ${system} (primeira vez)...`);
+        
         let loginResult;
         
         if (creds.system === 'rhid') {
-            // Se for coop-vitta ou delta, usar função que exporta CSV
             if (system === 'coop-vitta' || system === 'delta') {
                 const systemName = system === 'coop-vitta' ? 'COOP-VITTA' : 'DELTA';
                 loginResult = await loginRHIDAndExportCSV(creds.username, creds.password, systemName);
             } else {
-                // Para outros sistemas RHID, apenas fazer login
                 loginResult = await loginRHID(creds.username, creds.password);
             }
         } else if (creds.system === 'doctorid') {
             loginResult = await loginDoctorID(creds.username, creds.password);
         } else {
-            clearTimeout(timeout);
             return res.status(400).json({ error: 'Sistema não suportado' });
         }
 
-        clearTimeout(timeout);
-        res.json({
+        const result = {
             success: loginResult.success !== false,
             message: loginResult.success !== false ? 'Login bem-sucedido' : 'Falha no login',
             system: creds.system,
-            data: loginResult.data || null
+            systemKey: system, // Garantir que sabemos qual sistema é
+            data: loginResult.data || null,
+            cached: false
+        };
+
+        // Salvar no cache com chave específica do sistema
+        cache.logins.set(system, {
+            data: result,
+            timestamp: Date.now()
         });
+
+        console.log(`[CACHE] ✅ Dados de ${system} salvos no cache`);
+
+        res.json(result);
     } catch (error) {
-        clearTimeout(timeout);
         console.error('Erro ao verificar login:', error);
+        
+        // Se houver cache, retornar ele mesmo com erro
+        const cached = cache.logins.get(req.params.system);
+        if (cached) {
+            console.log(`[CACHE] ⚠️ Erro ao buscar dados de ${req.params.system}, retornando cache antigo...`);
+            return res.json({
+                ...cached.data,
+                cached: true,
+                error: true,
+                errorMessage: error.message
+            });
+        }
+        
         if (!res.headersSent) {
             res.status(500).json({ 
                 error: error.message,
