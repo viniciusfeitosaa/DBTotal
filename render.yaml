@@ -1,0 +1,34 @@
+# Configuração do Render para o Backend DBTotal
+# Este arquivo define como o Render deve fazer deploy do backend
+
+services:
+  - type: web
+    name: dbtotal-backend
+    env: node
+    plan: free # ou starter ($7/mês) para melhor performance
+    buildCommand: npm install && pip install -r requirements.txt
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # Adicione suas credenciais aqui (ou configure no dashboard do Render)
+      - key: VIVA_SAUDE_USERNAME
+        sync: false # Não sincronizar (configure manualmente)
+      - key: VIVA_SAUDE_PASSWORD
+        sync: false
+      - key: COOP_VITTA_USERNAME
+        sync: false
+      - key: COOP_VITTA_PASSWORD
+        sync: false
+      - key: DELTA_USERNAME
+        sync: false
+      - key: DELTA_PASSWORD
+        sync: false
+      # URL do frontend Netlify (será configurada após obter a URL)
+      - key: FRONTEND_URL
+        value: https://seu-site.netlify.app # ⚠️ ATUALIZE COM A URL DO NETLIFY
+      - key: NETLIFY_URL
+        value: https://seu-site.netlify.app # ⚠️ ATUALIZE COM A URL DO NETLIFY
+

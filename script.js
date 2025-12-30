@@ -1,10 +1,15 @@
 // Configuração da API
 // Detecta automaticamente se está em produção (Netlify) ou desenvolvimento (localhost)
 const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-// Se estiver em produção, você precisa configurar a URL do seu backend aqui
-// Exemplo: 'https://seu-backend.railway.app/api' ou 'https://seu-backend.render.com/api'
+
+// ⚠️ CONFIGURAÇÃO IMPORTANTE ⚠️
+// Substitua a URL abaixo pela URL do seu backend no Render
+// Exemplo: Se seu backend no Render é 'https://dbtotal-backend.onrender.com'
+// Então use: 'https://dbtotal-backend.onrender.com/api'
+const RENDER_BACKEND_URL = 'https://seu-backend.onrender.com/api'; // ⚠️ ATUALIZE AQUI COM A URL DO RENDER
+
 const API_BASE_URL = isProduction 
-    ? (window.API_BASE_URL || 'https://seu-backend.railway.app/api') // ⚠️ ATUALIZE ESTA URL COM A URL DO SEU BACKEND
+    ? (window.API_BASE_URL || RENDER_BACKEND_URL)
     : 'http://localhost:3000/api';
 
 // Configuração dos sistemas

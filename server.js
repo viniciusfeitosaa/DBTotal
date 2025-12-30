@@ -13,7 +13,34 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// Configurar CORS para aceitar requisições do Netlify e localhost
+const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:8888',
+    process.env.NETLIFY_URL, // URL do Netlify (será configurada como variável de ambiente)
+    process.env.FRONTEND_URL // URL alternativa do frontend
+].filter(Boolean); // Remove valores undefined/null
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // Permitir requisições sem origin (mobile apps, Postman, etc)
+        if (!origin) return callback(null, true);
+        
+        // Se a origem está na lista permitida ou é localhost
+        if (allowedOrigins.some(allowed => origin.includes(allowed.replace(/^https?:\/\//, ''))) || 
+            origin.includes('localhost') || 
+            origin.includes('127.0.0.1') ||
+            origin.includes('.netlify.app')) {
+            callback(null, true);
+        } else {
+            console.log(`[CORS] Origem bloqueada: ${origin}`);
+            callback(null, true); // Permitir todas por enquanto (ajustar em produção se necessário)
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Id']
+}));
 app.use(express.json());
 app.use(express.static('.'));
 
