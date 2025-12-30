@@ -192,15 +192,15 @@ async function fetchFinanceiroVivaSaude() {
                                         ${mesNome.charAt(0) + mesNome.slice(1).toLowerCase()}
                                     </div>
                                     
-                                    <div style="overflow-x: auto;">
-                                        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                                    <div class="table-container">
+                                        <table>
                                             <thead>
-                                                <tr style="background: rgba(255,255,255,0.1); border-bottom: 2px solid rgba(255,255,255,0.2);">
-                                                    <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">UPA</th>
-                                                    <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">VALOR NF</th>
-                                                    <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">Valor Recebido</th>
-                                                    <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">Data</th>
-                                                    <th style="padding: 12px; text-align: left; color: rgba(255,255,255,0.9); font-weight: 600;">Situação</th>
+                                                <tr>
+                                                    <th>UPAs</th>
+                                                    <th>VALOR NF</th>
+                                                    <th>Valor Recebido</th>
+                                                    <th>Data</th>
+                                                    <th>Situação</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
