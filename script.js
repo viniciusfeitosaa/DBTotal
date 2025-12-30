@@ -6,11 +6,17 @@ const isProduction = window.location.hostname !== 'localhost' && window.location
 // Substitua a URL abaixo pela URL do seu backend no Render
 // Exemplo: Se seu backend no Render é 'https://dbtotal-backend.onrender.com'
 // Então use: 'https://dbtotal-backend.onrender.com/api'
-const RENDER_BACKEND_URL = 'https://seu-backend.onrender.com/api'; // ⚠️ ATUALIZE AQUI COM A URL DO RENDER
+// ⚠️ IMPORTANTE: A URL deve terminar com /api
+const RENDER_BACKEND_URL = 'https://dbtotal.onrender.com/api'; // ⚠️ ATUALIZE AQUI COM A URL DO RENDER + /api
 
 const API_BASE_URL = isProduction 
     ? (window.API_BASE_URL || RENDER_BACKEND_URL)
     : 'http://localhost:3000/api';
+
+// Log de debug para verificar configuração
+console.log('[CONFIG] Ambiente:', isProduction ? 'PRODUÇÃO' : 'DESENVOLVIMENTO');
+console.log('[CONFIG] API Base URL:', API_BASE_URL);
+console.log('[CONFIG] Hostname:', window.location.hostname);
 
 // Configuração dos sistemas
 const systems = {
@@ -38,8 +44,18 @@ const AUTO_REFRESH_INTERVAL = 24 * 60 * 60 * 1000; // 24 horas
 // Buscar dados financeiros do Viva Saúde
 async function fetchFinanceiroVivaSaude() {
     try {
-        const response = await fetch(`${API_BASE_URL}/financeiro/viva-saude`);
+        const url = `${API_BASE_URL}/financeiro/viva-saude`;
+        console.log('[FETCH] Buscando dados financeiros:', url);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            console.error('[FETCH] Erro na resposta:', response.status, response.statusText);
+            throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`);
+        }
+        
         const data = await response.json();
+        console.log('[FETCH] Dados recebidos:', data);
 
         if (data.success) {
             // Atualizar elementos financeiros
@@ -532,9 +548,21 @@ async function fetchFinanceiroVivaSaude() {
         }
     } catch (error) {
         console.error('[FRONTEND] Erro ao buscar dados financeiros:', error);
+        console.error('[FRONTEND] Tipo de erro:', error.name);
+        console.error('[FRONTEND] Mensagem:', error.message);
+        console.error('[FRONTEND] URL tentada:', `${API_BASE_URL}/financeiro/viva-saude`);
+        
+        // Verificar se é erro de CORS
+        if (error.message.includes('CORS') || error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+            console.error('[FRONTEND] ⚠️ Possível erro de CORS. Verifique:');
+            console.error('[FRONTEND] 1. URL do backend está correta?', API_BASE_URL);
+            console.error('[FRONTEND] 2. Backend está rodando?');
+            console.error('[FRONTEND] 3. CORS está configurado no backend?');
+        }
+        
         const statusEl = document.getElementById('viva-saude-financeiro-status');
         if (statusEl) {
-            statusEl.textContent = 'Erro de conexão';
+            statusEl.textContent = `Erro: ${error.message.substring(0, 30)}...`;
             statusEl.style.color = '#ef4444';
         }
     }
@@ -571,14 +599,23 @@ document.addEventListener('DOMContentLoaded', () => {
 // Verificar saúde do servidor
 async function checkServerHealth() {
     try {
-        const response = await fetch(`${API_BASE_URL}/health`);
+        const url = `${API_BASE_URL}/health`;
+        console.log('[HEALTH] Verificando saúde do servidor:', url);
+        
+        const response = await fetch(url);
+        
         if (response.ok) {
+            const data = await response.json();
+            console.log('[HEALTH] Servidor OK:', data);
             addLog('Servidor conectado com sucesso', 'success');
         } else {
+            console.error('[HEALTH] Servidor respondeu com erro:', response.status, response.statusText);
             addLog('Servidor não está respondendo corretamente', 'warning');
         }
     } catch (error) {
-        addLog('Erro ao conectar com o servidor. Certifique-se de que o servidor está rodando na porta 3000', 'error');
+        console.error('[HEALTH] Erro ao conectar:', error);
+        console.error('[HEALTH] URL tentada:', `${API_BASE_URL}/health`);
+        addLog(`Erro ao conectar com o servidor: ${error.message}`, 'error');
     }
 }
 
@@ -638,14 +675,24 @@ async function checkLogin(systemKey) {
     updateGeralCard();
 
     try {
-        const response = await fetch(`${API_BASE_URL}${system.apiEndpoint}`, {
+        const url = `${API_BASE_URL}${system.apiEndpoint}`;
+        console.log(`[LOGIN] Verificando login ${systemKey}:`, url);
+        
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             }
         });
 
+        if (!response.ok) {
+            console.error(`[LOGIN] Erro na resposta para ${systemKey}:`, response.status, response.statusText);
+            const errorText = await response.text();
+            console.error(`[LOGIN] Resposta de erro:`, errorText);
+        }
+
         const data = await response.json();
+        console.log(`[LOGIN] Resposta para ${systemKey}:`, data);
         const responseTime = Date.now() - startTime;
 
         if (response.ok && data.success) {
