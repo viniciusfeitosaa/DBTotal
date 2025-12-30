@@ -168,6 +168,7 @@ async function launchPuppeteer() {
 function getPuppeteerOptions() {
     const options = {
         headless: true,
+        timeout: 120000, // 120 segundos para iniciar o Chrome (aumentado de 30s padrão)
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -177,7 +178,12 @@ function getPuppeteerOptions() {
             '--no-zygote',
             '--single-process',
             '--disable-gpu',
-            '--disable-software-rasterizer'
+            '--disable-software-rasterizer',
+            '--disable-extensions',
+            '--disable-background-networking',
+            '--disable-background-timer-throttling',
+            '--disable-renderer-backgrounding',
+            '--disable-backgrounding-occluded-windows'
         ]
     };
     
