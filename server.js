@@ -398,7 +398,7 @@ async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITT
 
         // Clicar no botão de menu (três pontos)
         console.log(`[${systemName}] Procurando botão de menu...`);
-        await page.waitForSelector('.m-dropdown__toggle', { timeout: 15000, visible: true });
+        await page.waitForSelector('.m-dropdown__toggle', { timeout: 30000, visible: true }); // Aumentado para 30s
         console.log(`[${systemName}] Botão de menu encontrado, preparando para clicar...`);
         
         // Tentar clicar usando múltiplos métodos
@@ -455,7 +455,7 @@ async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITT
         
         try {
             // Aguardar o dropdown aparecer
-            await page.waitForSelector('a[ng-click="exportCSV()"]', { timeout: 10000, visible: true });
+            await page.waitForSelector('a[ng-click="exportCSV()"]', { timeout: 30000, visible: true }); // Aumentado para 30s
             console.log(`[${systemName}] Link "Exportar CSV" encontrado, preparando para clicar...`);
             
             // Tentar clicar via Puppeteer
@@ -996,13 +996,13 @@ async function fetchPersonList(cookies) {
         
         // Tentar aguardar pela tabela
         try {
-            await page.waitForSelector('#mydatatable', { timeout: 15000, visible: true });
+            await page.waitForSelector('#mydatatable', { timeout: 30000, visible: true }); // Aumentado para 30s
             tableFound = true;
             console.log('Tabela #mydatatable encontrada!');
         } catch (e) {
             console.log('Tabela não encontrada imediatamente, tentando outras seletores...');
             try {
-                await page.waitForSelector('table[datatable], table.dataTable, table#mydatatable', { timeout: 10000, visible: true });
+                await page.waitForSelector('table[datatable], table.dataTable, table#mydatatable', { timeout: 30000, visible: true }); // Aumentado para 30s
                 tableFound = true;
                 console.log('Tabela encontrada por seletor alternativo!');
             } catch (e2) {
@@ -1308,11 +1308,11 @@ async function loginDoctorID(username, password) {
         }
 
         console.log('[DOCTORID] ✅ Link "Filtro Avançado" clicado com sucesso');
-        await delay(1000);
+        await delay(3000); // Aumentado para 3s (Render é mais lento)
         
         // Aguardar elemento filtroComplexo_selecionar aparecer
         console.log('[DOCTORID] Aguardando elemento filtroComplexo_selecionar aparecer...');
-        await page.waitForSelector('.filtroComplexo_selecionar', { timeout: 10000, visible: true });
+        await page.waitForSelector('.filtroComplexo_selecionar', { timeout: 30000, visible: true }); // Aumentado para 30s
         console.log('[DOCTORID] ✅ Elemento filtroComplexo_selecionar encontrado');
         await delay(1000);
         
@@ -1702,7 +1702,7 @@ async function loginDoctorID(username, password) {
         // Tentar aguardar pelo elemento de alerta
         try {
             await page.waitForSelector('.alert.alert-dismissible.hidden-print.alert-info[role="alert"]', { 
-                timeout: 10000, 
+                timeout: 30000, // Aumentado para 30s
                 visible: true 
             });
             alertaEncontrado = true;
