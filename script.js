@@ -119,7 +119,7 @@ async function fetchFinanceiroVivaSaude() {
                 const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
                 if (detalhesMesesContainer && Object.keys(data.valores.meses).length > 0) {
                     let htmlDetalhes = '<div style="margin-bottom: 30px;">';
-                    htmlDetalhes += '<h3 style="font-size: 18px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 20px; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 10px;">Detalhes por Mês</h3>';
+                    htmlDetalhes += '<h3 style="font-size: 18px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 20px; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 10px;">Detalhes por Mês - UPAS</h3>';
                     
                     // Ordenar meses (Janeiro a Dezembro)
                     const ordemMeses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 
@@ -244,7 +244,7 @@ async function fetchFinanceiroVivaSaude() {
                                 htmlDetalhes += `
                                     <tr class="${i % 2 === 0 ? 'even-row' : 'odd-row'}">
                                         <td style="color: rgba(255,255,255,0.9);">
-                                            ${upa ? escapeHtml(upa) : '-'}
+                                            ${upa ? escapeHtml(upa) : 'TOTAL'}
                                         </td>
                                         <td style="color: #f59e0b; font-weight: 600;">
                                             ${valorNF ? escapeHtml(valorNF) : '-'}
