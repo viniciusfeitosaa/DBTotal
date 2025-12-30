@@ -1,0 +1,41 @@
+# Configuração do Netlify para o Dashboard DBTotal
+# IMPORTANTE: Este projeto precisa de um backend rodando em outro servidor
+# O Netlify apenas hospeda o frontend (HTML/CSS/JS)
+
+[build]
+  # Comando de build (não há build necessário, apenas arquivos estáticos)
+  command = "echo 'No build needed'"
+  # Diretório de publicação (arquivos estáticos)
+  publish = "."
+
+# Redirecionamentos para SPA (Single Page Application)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers de segurança
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Headers para arquivos estáticos
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+

@@ -1,5 +1,11 @@
 // Configuração da API
-const API_BASE_URL = 'http://localhost:3000/api';
+// Detecta automaticamente se está em produção (Netlify) ou desenvolvimento (localhost)
+const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+// Se estiver em produção, você precisa configurar a URL do seu backend aqui
+// Exemplo: 'https://seu-backend.railway.app/api' ou 'https://seu-backend.render.com/api'
+const API_BASE_URL = isProduction 
+    ? (window.API_BASE_URL || 'https://seu-backend.railway.app/api') // ⚠️ ATUALIZE ESTA URL COM A URL DO SEU BACKEND
+    : 'http://localhost:3000/api';
 
 // Configuração dos sistemas
 const systems = {
