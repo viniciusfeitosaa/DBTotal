@@ -7,7 +7,7 @@ const isProduction = window.location.hostname !== 'localhost' && window.location
 // Exemplo: Se seu backend no Render é 'https://dbtotal-backend.onrender.com'
 // Então use: 'https://dbtotal-backend.onrender.com/api'
 // ⚠️ IMPORTANTE: A URL deve terminar com /api
-const RENDER_BACKEND_URL = 'https://dbtotal.onrender.com/api'; // ⚠️ ATUALIZE AQUI COM A URL DO RENDER + /api
+const RENDER_BACKEND_URL = 'https://abc123-def456.ngrok-free.app/api'; // ⚠️ ATUALIZE AQUI COM A URL DO NGROK + /api
 
 const API_BASE_URL = isProduction 
     ? (window.API_BASE_URL || RENDER_BACKEND_URL)
