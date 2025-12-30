@@ -7,7 +7,7 @@ const isProduction = window.location.hostname !== 'localhost' && window.location
 // Exemplo: Se seu backend no Render é 'https://dbtotal-backend.onrender.com'
 // Então use: 'https://dbtotal-backend.onrender.com/api'
 // ⚠️ IMPORTANTE: A URL deve terminar com /api
-const RENDER_BACKEND_URL = 'https://unapperceived-unmiasmatic-tiera.ngrok-free.dev/api'; // URL do ngrok (backend local)
+const RENDER_BACKEND_URL = 'https://holds-declare-plans-used.trycloudflare.com/api'; // URL do Cloudflare Tunnel (backend local)
 
 const API_BASE_URL = isProduction 
     ? (window.API_BASE_URL || RENDER_BACKEND_URL)
