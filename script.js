@@ -242,22 +242,22 @@ async function fetchFinanceiroVivaSaude() {
                                 }
                                 
                                 htmlDetalhes += `
-                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); ${i % 2 === 0 ? 'background: rgba(255,255,255,0.02);' : ''}">
-                                        <td style="padding: 12px; color: rgba(255,255,255,0.9); border-right: 1px solid rgba(255,255,255,0.1);">
+                                    <tr class="${i % 2 === 0 ? 'even-row' : 'odd-row'}">
+                                        <td style="color: rgba(255,255,255,0.9);">
                                             ${upa ? escapeHtml(upa) : '-'}
                                         </td>
-                                        <td style="padding: 12px; color: #f59e0b; font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="color: #f59e0b; font-weight: 600;">
                                             ${valorNF ? escapeHtml(valorNF) : '-'}
                                         </td>
-                                        <td style="padding: 12px; color: #10b981; font-weight: 600; border-right: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="color: #10b981; font-weight: 600;">
                                             ${valor ? escapeHtml(valor) : '-'}
                                         </td>
-                                        <td style="padding: 12px; color: #a78bfa; border-right: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="color: #a78bfa;">
                                             ${data ? escapeHtml(data) : '-'}
                                         </td>
-                                        <td style="padding: 12px;">
+                                        <td>
                                             ${situacao ? `
-                                                <span style="background: rgba(${corSituacao === '#10b981' ? '16, 185, 129' : corSituacao === '#ef4444' ? '239, 68, 68' : '245, 158, 11'}, 0.2); padding: 4px 10px; border-radius: 4px; font-size: 12px; color: ${corSituacao}; border: 1px solid rgba(${corSituacao === '#10b981' ? '16, 185, 129' : corSituacao === '#ef4444' ? '239, 68, 68' : '245, 158, 11'}, 0.3);">
+                                                <span class="situacao-badge" style="background: rgba(${corSituacao === '#10b981' ? '16, 185, 129' : corSituacao === '#ef4444' ? '239, 68, 68' : '245, 158, 11'}, 0.2); padding: 4px 10px; border-radius: 4px; font-size: 12px; color: ${corSituacao}; border: 1px solid rgba(${corSituacao === '#10b981' ? '16, 185, 129' : corSituacao === '#ef4444' ? '239, 68, 68' : '245, 158, 11'}, 0.3);">
                                                     ${escapeHtml(situacao)}
                                                 </span>
                                             ` : '-'}
@@ -619,8 +619,49 @@ async function fetchFinanceiroVivaSaude() {
     }
 }
 
+// Menu Mobile
+function initializeMobileMenu() {
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.createElement('div');
+    overlay.className = 'sidebar-overlay';
+    document.body.appendChild(overlay);
+    
+    function toggleMenu() {
+        sidebar.classList.toggle('active');
+        overlay.classList.toggle('active');
+        mobileMenuBtn.classList.toggle('active');
+    }
+    
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', toggleMenu);
+    }
+    
+    overlay.addEventListener('click', toggleMenu);
+    
+    // Fechar menu ao clicar em um item
+    const navItems = document.querySelectorAll('.nav-item');
+    navItems.forEach(item => {
+        item.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                toggleMenu();
+            }
+        });
+    });
+    
+    // Fechar menu ao redimensionar para desktop
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            sidebar.classList.remove('active');
+            overlay.classList.remove('active');
+            mobileMenuBtn.classList.remove('active');
+        }
+    });
+}
+
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
+    initializeMobileMenu();
     initializeEventListeners();
     checkServerHealth();
     

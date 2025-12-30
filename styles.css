@@ -701,6 +701,61 @@ body {
     color: var(--info);
 }
 
+/* Tabelas Responsivas */
+.table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 20px 0;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+table th,
+table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+}
+
+table th {
+    background: var(--bg-card);
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
+table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+table tbody tr.even-row {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+table tbody tr.odd-row {
+    background: transparent;
+}
+
+.situacao-badge {
+    display: inline-block;
+    white-space: nowrap;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
     width: 10px;
@@ -743,6 +798,62 @@ body {
     }
 }
 
+/* Mobile Menu Button */
+.mobile-menu-btn {
+    display: none;
+    flex-direction: column;
+    gap: 5px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px;
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+.mobile-menu-btn span {
+    width: 24px;
+    height: 2px;
+    background: var(--text-primary);
+    border-radius: 2px;
+    transition: all 0.3s ease;
+}
+
+.mobile-menu-btn:hover {
+    background: var(--bg-card);
+    border-color: var(--primary);
+}
+
+.mobile-menu-btn.active span:nth-child(1) {
+    transform: rotate(45deg) translate(8px, 8px);
+}
+
+.mobile-menu-btn.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.mobile-menu-btn.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(8px, -8px);
+}
+
+/* Overlay para mobile */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 99;
+    backdrop-filter: blur(4px);
+}
+
+.sidebar-overlay.active {
+    display: block;
+}
+
 /* Responsividade */
 @media (max-width: 1024px) {
     .sidebar {
@@ -754,36 +865,365 @@ body {
         padding: 24px;
     }
     
-    .dashboard-container {
-        grid-template-columns: repeat(2, 1fr);
+    .page-title {
+        font-size: 28px;
+    }
+    
+    .card-title-modern {
+        font-size: 20px;
     }
 }
 
 @media (max-width: 768px) {
+    .mobile-menu-btn {
+        display: flex;
+    }
+    
     .sidebar {
         transform: translateX(-100%);
-        transition: transform 0.3s ease;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        width: 280px;
+    }
+    
+    .sidebar.active {
+        transform: translateX(0);
     }
     
     .main-content {
         margin-left: 0;
-        padding: 20px;
+        padding: 16px;
     }
     
     .top-bar {
-        flex-direction: column;
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+    
+    .top-bar-left {
+        flex: 1;
     }
     
     .page-title {
+        font-size: 22px;
+        margin-bottom: 4px;
+    }
+    
+    .page-subtitle {
+        font-size: 12px;
+    }
+    
+    .dashboard-container {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .system-card {
+        padding: 16px;
+        border-radius: 16px;
+    }
+    
+    .card-header-modern {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+    }
+    
+    .card-icon-wrapper {
+        width: 48px;
+        height: 48px;
+    }
+    
+    .card-icon {
         font-size: 24px;
+    }
+    
+    .card-title-modern {
+        font-size: 18px;
+    }
+    
+    .card-subtitle {
+        font-size: 12px;
     }
     
     .stats-grid {
         grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .stat-item {
+        padding: 12px;
+    }
+    
+    .stat-value {
+        font-size: 14px;
+    }
+    
+    .stat-value-large {
+        font-size: 24px;
     }
     
     .action-btn {
-        flex: 1;
-        justify-content: center;
+        padding: 10px 16px;
+        font-size: 13px;
+    }
+    
+    .status-badge {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+    
+    .status-text-modern {
+        font-size: 13px;
+    }
+    
+    /* Tabelas responsivas */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 16px -16px;
+        padding: 0 16px;
+    }
+    
+    table {
+        min-width: 600px;
+        font-size: 12px;
+    }
+    
+    table th,
+    table td {
+        padding: 10px 8px;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+    
+    table th {
+        font-size: 11px;
+    }
+    
+    /* Tabelas em cards */
+    .system-card .table-container {
+        margin: 16px -16px;
+    }
+    
+    /* Logs responsivos */
+    .logs-container-modern {
+        max-height: 300px;
+        padding: 12px;
+        font-size: 11px;
+    }
+    
+    .log-entry-modern {
+        padding: 8px 0;
+        gap: 8px;
+    }
+    
+    .log-time {
+        min-width: 60px;
+        font-size: 10px;
+    }
+    
+    .log-message {
+        font-size: 11px;
+    }
+    
+    /* Info panel responsivo */
+    .info-panel {
+        padding: 12px;
+        max-height: 150px;
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .main-content {
+        padding: 12px;
+    }
+    
+    .page-title {
+        font-size: 20px;
+    }
+    
+    .page-subtitle {
+        font-size: 11px;
+    }
+    
+    .system-card {
+        padding: 12px;
+        border-radius: 12px;
+    }
+    
+    .card-header-modern {
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+    }
+    
+    .card-icon-wrapper {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+    }
+    
+    .card-icon {
+        font-size: 20px;
+    }
+    
+    .card-title-modern {
+        font-size: 16px;
+    }
+    
+    .card-subtitle {
+        font-size: 11px;
+    }
+    
+    .stats-grid {
+        gap: 8px;
+    }
+    
+    .stat-item {
+        padding: 10px;
+    }
+    
+    .stat-label {
+        font-size: 10px;
+        margin-bottom: 6px;
+    }
+    
+    .stat-value {
+        font-size: 13px;
+    }
+    
+    .stat-value-large {
+        font-size: 20px;
+    }
+    
+    .status-badge {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    
+    .status-indicator-modern {
+        width: 8px;
+        height: 8px;
+    }
+    
+    .action-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    
+    .btn-icon {
+        width: 16px;
+        height: 16px;
+    }
+    
+    /* Tabelas muito pequenas */
+    .table-container {
+        margin: 12px -12px;
+        padding: 0 12px;
+    }
+    
+    table {
+        min-width: 500px;
+        font-size: 11px;
+    }
+    
+    table th,
+    table td {
+        padding: 8px 6px;
+        font-size: 11px;
+    }
+    
+    table th {
+        font-size: 10px;
+    }
+    
+    /* Logs muito pequenos */
+    .logs-container-modern {
+        max-height: 250px;
+        padding: 10px;
+        font-size: 10px;
+    }
+    
+    .log-time {
+        min-width: 50px;
+        font-size: 9px;
+    }
+    
+    .log-message {
+        font-size: 10px;
+    }
+    
+    /* Sidebar mobile */
+    .sidebar {
+        width: 100%;
+        max-width: 320px;
+    }
+    
+    .logo-title {
+        font-size: 18px;
+    }
+    
+    .logo-subtitle {
+        font-size: 11px;
+    }
+    
+    .nav-item {
+        padding: 10px;
+        font-size: 14px;
+    }
+    
+    .nav-icon {
+        font-size: 18px;
+        width: 20px;
+    }
+}
+
+/* Orientação paisagem em mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+    .main-content {
+        padding: 12px;
+    }
+    
+    .page-title {
+        font-size: 20px;
+    }
+    
+    .system-card {
+        padding: 12px;
+    }
+    
+    .logs-container-modern {
+        max-height: 200px;
+    }
+}
+
+/* Ajustes para telas muito pequenas (menos de 360px) */
+@media (max-width: 360px) {
+    .main-content {
+        padding: 10px;
+    }
+    
+    .page-title {
+        font-size: 18px;
+    }
+    
+    .system-card {
+        padding: 10px;
+    }
+    
+    .card-title-modern {
+        font-size: 15px;
+    }
+    
+    .stat-value {
+        font-size: 12px;
+    }
+    
+    .stat-value-large {
+        font-size: 18px;
     }
 }
