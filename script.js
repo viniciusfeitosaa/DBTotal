@@ -19,11 +19,15 @@ console.log('[CONFIG] API Base URL:', API_BASE_URL);
 console.log('[CONFIG] Hostname:', window.location.hostname);
 
 // Função helper para fazer fetch com headers do ngrok
-function fetchWithNgrokHeaders(url, options = {}) {
+async function fetchWithNgrokHeaders(url, options = {}) {
     const defaultHeaders = {
         'Content-Type': 'application/json',
         'ngrok-skip-browser-warning': 'true', // Bypass do interstício do ngrok
-        'User-Agent': 'Mozilla/5.0' // Evitar bloqueio do ngrok
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', // Evitar bloqueio do ngrok
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
     };
     
     const mergedOptions = {
@@ -34,7 +38,26 @@ function fetchWithNgrokHeaders(url, options = {}) {
         }
     };
     
-    return fetch(url, mergedOptions);
+    try {
+        const response = await fetch(url, mergedOptions);
+        
+        // Verificar se a resposta é HTML (página de interstício do ngrok)
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+            const text = await response.text();
+            if (text.includes('<!DOCTYPE') || text.includes('ngrok')) {
+                console.error('[NGROK] ⚠️ Resposta HTML detectada (página de interstício do ngrok)');
+                console.error('[NGROK] URL:', url);
+                console.error('[NGROK] Primeiros 200 caracteres:', text.substring(0, 200));
+                throw new Error('ngrok está retornando página HTML em vez de JSON. Acesse a URL manualmente uma vez no navegador para autorizar.');
+            }
+        }
+        
+        return response;
+    } catch (error) {
+        console.error('[NGROK] Erro na requisição:', error);
+        throw error;
+    }
 }
 
 // Configuração dos sistemas
@@ -634,7 +657,13 @@ async function checkServerHealth() {
     } catch (error) {
         console.error('[HEALTH] Erro ao conectar:', error);
         console.error('[HEALTH] URL tentada:', `${API_BASE_URL}/health`);
-        addLog(`Erro ao conectar com o servidor: ${error.message}`, 'error');
+        
+        // Se for erro do ngrok, mostrar mensagem mais clara
+        if (error.message.includes('ngrok') || error.message.includes('HTML')) {
+            addLog('⚠️ ngrok bloqueando requisições. Acesse a URL manualmente uma vez no navegador.', 'warning');
+        } else {
+            addLog(`Erro ao conectar com o servidor: ${error.message}`, 'error');
+        }
     }
 }
 
