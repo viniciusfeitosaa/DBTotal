@@ -96,6 +96,15 @@ async function fetchFinanceiroVivaSaude() {
             throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`);
         }
         
+        // Verificar se a resposta é realmente JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            console.error('[FETCH] Resposta não é JSON. Content-Type:', contentType);
+            console.error('[FETCH] Primeiros 200 caracteres:', text.substring(0, 200));
+            throw new Error('Resposta não é JSON. Possível página de interstício do ngrok.');
+        }
+        
         const data = await response.json();
         console.log('[FETCH] Dados recebidos:', data);
 
