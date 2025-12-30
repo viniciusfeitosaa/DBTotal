@@ -73,6 +73,158 @@ if (!fs.existsSync(downloadsDir)) {
 // Armazenar sessões (em produção, use Redis ou similar)
 const sessions = new Map();
 
+// Sistema de Cache para acelerar respostas
+const cache = {
+    // Cache de logins por sistema
+    logins: new Map(), // { system: { data, timestamp, updating } }
+    // Cache de dados financeiros
+    financeiro: {
+        data: null,
+        timestamp: null,
+        updating: false
+    },
+    // Configuração
+    config: {
+        TTL_LOGINS: 5 * 60 * 1000, // 5 minutos para logins
+        TTL_FINANCEIRO: 10 * 60 * 1000, // 10 minutos para financeiro
+        UPDATE_INTERVAL: 4 * 60 * 1000 // Atualizar a cada 4 minutos (antes de expirar)
+    }
+};
+
+// Função para verificar se cache está válido
+function isCacheValid(timestamp, ttl) {
+    if (!timestamp) return false;
+    return (Date.now() - timestamp) < ttl;
+}
+
+// Função para atualizar cache de login em background
+async function updateLoginCache(system) {
+    const cacheKey = system;
+    const cached = cache.logins.get(cacheKey);
+    
+    // Se já está atualizando, não fazer nada
+    if (cached && cached.updating) {
+        console.log(`[CACHE] ${system} já está sendo atualizado, pulando...`);
+        return;
+    }
+    
+    // Marcar como atualizando
+    if (cached) {
+        cached.updating = true;
+    }
+    
+    try {
+        console.log(`[CACHE] Atualizando cache de ${system} em background...`);
+        const creds = CREDENTIALS[system];
+        
+        if (!creds || !creds.username || !creds.password) {
+            console.log(`[CACHE] Credenciais não configuradas para ${system}`);
+            return;
+        }
+        
+        let loginResult;
+        
+        if (creds.system === 'rhid') {
+            if (system === 'coop-vitta' || system === 'delta') {
+                const systemName = system === 'coop-vitta' ? 'COOP-VITTA' : 'DELTA';
+                loginResult = await loginRHIDAndExportCSV(creds.username, creds.password, systemName);
+            } else {
+                loginResult = await loginRHID(creds.username, creds.password);
+            }
+        } else if (creds.system === 'doctorid') {
+            loginResult = await loginDoctorID(creds.username, creds.password);
+        }
+        
+        // Atualizar cache
+        cache.logins.set(cacheKey, {
+            data: {
+                success: loginResult.success !== false,
+                message: loginResult.success !== false ? 'Login bem-sucedido' : 'Falha no login',
+                system: creds.system,
+                data: loginResult.data || null
+            },
+            timestamp: Date.now(),
+            updating: false
+        });
+        
+        console.log(`[CACHE] ✅ Cache de ${system} atualizado com sucesso`);
+    } catch (error) {
+        console.error(`[CACHE] ❌ Erro ao atualizar cache de ${system}:`, error.message);
+        // Manter cache antigo se houver erro
+        if (cached) {
+            cached.updating = false;
+        }
+    }
+}
+
+// Função para atualizar cache financeiro em background
+async function updateFinanceiroCache() {
+    if (cache.financeiro.updating) {
+        console.log('[CACHE] Financeiro já está sendo atualizado, pulando...');
+        return;
+    }
+    
+    cache.financeiro.updating = true;
+    
+    try {
+        console.log('[CACHE] Atualizando cache financeiro em background...');
+        const result = await fetchGoogleSheetsFinanceiro();
+        
+        cache.financeiro.data = result;
+        cache.financeiro.timestamp = Date.now();
+        cache.financeiro.updating = false;
+        
+        console.log('[CACHE] ✅ Cache financeiro atualizado com sucesso');
+    } catch (error) {
+        console.error('[CACHE] ❌ Erro ao atualizar cache financeiro:', error.message);
+        cache.financeiro.updating = false;
+    }
+}
+
+// Iniciar atualização automática em background
+function startBackgroundUpdates() {
+    console.log('[CACHE] Iniciando atualizações automáticas em background...');
+    
+    // Atualizar todos os sistemas periodicamente
+    setInterval(() => {
+        console.log('[CACHE] Iniciando ciclo de atualização automática...');
+        
+        // Atualizar logins
+        Object.keys(CREDENTIALS).forEach(system => {
+            const cached = cache.logins.get(system);
+            // Atualizar se não há cache ou se está próximo de expirar
+            if (!cached || !isCacheValid(cached.timestamp, cache.config.TTL_LOGINS - cache.config.UPDATE_INTERVAL)) {
+                updateLoginCache(system).catch(err => {
+                    console.error(`[CACHE] Erro ao atualizar ${system}:`, err.message);
+                });
+            }
+        });
+        
+        // Atualizar financeiro
+        if (!cache.financeiro.data || !isCacheValid(cache.financeiro.timestamp, cache.config.TTL_FINANCEIRO - cache.config.UPDATE_INTERVAL)) {
+            updateFinanceiroCache().catch(err => {
+                console.error('[CACHE] Erro ao atualizar financeiro:', err.message);
+            });
+        }
+    }, cache.config.UPDATE_INTERVAL);
+    
+    // Atualização inicial imediata (após 10 segundos do servidor iniciar)
+    setTimeout(() => {
+        console.log('[CACHE] Executando atualização inicial...');
+        Object.keys(CREDENTIALS).forEach(system => {
+            updateLoginCache(system).catch(err => {
+                console.error(`[CACHE] Erro na atualização inicial de ${system}:`, err.message);
+            });
+        });
+        updateFinanceiroCache().catch(err => {
+            console.error('[CACHE] Erro na atualização inicial financeiro:', err.message);
+        });
+    }, 10000); // 10 segundos após iniciar
+}
+
+// Iniciar atualizações em background
+startBackgroundUpdates();
+
 // Credenciais carregadas do arquivo .env
 const CREDENTIALS = {
     'viva-saude': {
@@ -2443,6 +2595,40 @@ async function fetchGoogleSheetsFinanceiro() {
 
 // Rota para buscar dados financeiros do Google Sheets (usando Python)
 app.get('/api/financeiro/viva-saude', async (req, res) => {
+    const forceUpdate = req.query.force === 'true'; // Permitir forçar atualização
+    
+    // Verificar cache primeiro (se não for atualização forçada)
+    if (!forceUpdate) {
+        if (cache.financeiro.data && isCacheValid(cache.financeiro.timestamp, cache.config.TTL_FINANCEIRO)) {
+            console.log(`[CACHE] ✅ Retornando dados financeiros do cache (${Math.round((Date.now() - cache.financeiro.timestamp) / 1000)}s atrás)`);
+            return res.json({
+                ...cache.financeiro.data,
+                cached: true,
+                cacheAge: Math.round((Date.now() - cache.financeiro.timestamp) / 1000)
+            });
+        }
+    }
+    
+    // Se não há cache válido ou é atualização forçada, buscar dados
+    console.log(`[CACHE] ⏳ Buscando dados financeiros frescos...`);
+    
+    // Iniciar atualização em background para próxima vez
+    updateFinanceiroCache().catch(err => {
+        console.error('[CACHE] Erro ao atualizar cache financeiro em background:', err.message);
+    });
+    
+    // Se há cache antigo, retornar ele enquanto atualiza
+    if (cache.financeiro.data && !forceUpdate) {
+        console.log(`[CACHE] ⚡ Retornando cache financeiro antigo enquanto atualiza...`);
+        return res.json({
+            ...cache.financeiro.data,
+            cached: true,
+            updating: true,
+            cacheAge: Math.round((Date.now() - cache.financeiro.timestamp) / 1000)
+        });
+    }
+    
+    // Se não há cache, fazer requisição síncrona (primeira vez)
     let pythonProcess = null;
     try {
         console.log('[GOOGLE SHEETS] Iniciando extração via Python...');
@@ -2524,10 +2710,30 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
             console.log('[GOOGLE SHEETS] Valores extraídos:', JSON.stringify(result.valores, null, 2));
         }
         
-        res.json(result);
+        // Salvar no cache
+        cache.financeiro.data = result;
+        cache.financeiro.timestamp = Date.now();
+        cache.financeiro.updating = false;
+        
+        res.json({
+            ...result,
+            cached: false
+        });
     } catch (error) {
         console.error('[GOOGLE SHEETS] Erro ao executar script Python:', error.message);
         console.error('[GOOGLE SHEETS] Tipo de erro:', error.constructor.name);
+        
+        // Se houver cache, retornar ele mesmo com erro
+        if (cache.financeiro.data) {
+            console.log(`[CACHE] ⚠️ Erro ao buscar dados financeiros, retornando cache antigo...`);
+            return res.json({
+                ...cache.financeiro.data,
+                cached: true,
+                error: true,
+                errorMessage: error.message,
+                cacheAge: Math.round((Date.now() - cache.financeiro.timestamp) / 1000)
+            });
+        }
         
         // Se for timeout, fornecer mensagem mais clara
         if (error.message.includes('Timeout') || error.message.includes('timeout')) {
@@ -2545,62 +2751,105 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
 
 // Rota para verificar login de um sistema específico
 app.post('/api/check-login/:system', async (req, res) => {
-    // Timeout de 3 minutos para evitar que a requisição trave
-    const timeout = setTimeout(() => {
-        if (!res.headersSent) {
-            res.status(504).json({ 
-                error: 'Timeout',
-                message: 'A requisição demorou mais de 3 minutos. O servidor pode estar sobrecarregado.'
-            });
-        }
-    }, 180000); // 3 minutos
-
     try {
         const { system } = req.params;
+        const forceUpdate = req.query.force === 'true'; // Permitir forçar atualização
+        
         const creds = CREDENTIALS[system];
         
         if (!creds) {
-            clearTimeout(timeout);
             return res.status(400).json({ error: 'Sistema não encontrado' });
         }
 
         // Verificar se as credenciais estão configuradas
         if (!creds.username || !creds.password) {
-            clearTimeout(timeout);
             return res.status(500).json({ 
                 error: 'Credenciais não configuradas',
                 message: `As credenciais para ${system} não estão configuradas. Configure as variáveis de ambiente ${system.toUpperCase().replace('-', '_')}_USERNAME e ${system.toUpperCase().replace('-', '_')}_PASSWORD no Render.`
             });
         }
 
+        // Verificar cache primeiro (se não for atualização forçada)
+        if (!forceUpdate) {
+            const cached = cache.logins.get(system);
+            if (cached && isCacheValid(cached.timestamp, cache.config.TTL_LOGINS)) {
+                console.log(`[CACHE] ✅ Retornando dados do cache para ${system} (${Math.round((Date.now() - cached.timestamp) / 1000)}s atrás)`);
+                return res.json({
+                    ...cached.data,
+                    cached: true,
+                    cacheAge: Math.round((Date.now() - cached.timestamp) / 1000) // idade do cache em segundos
+                });
+            }
+        }
+
+        // Se não há cache válido ou é atualização forçada, buscar dados
+        console.log(`[CACHE] ⏳ Buscando dados frescos para ${system}...`);
+        
+        // Iniciar atualização em background para próxima vez
+        updateLoginCache(system).catch(err => {
+            console.error(`[CACHE] Erro ao atualizar cache em background:`, err.message);
+        });
+
+        // Se há cache antigo, retornar ele enquanto atualiza
+        const cached = cache.logins.get(system);
+        if (cached && !forceUpdate) {
+            console.log(`[CACHE] ⚡ Retornando cache antigo enquanto atualiza ${system}...`);
+            return res.json({
+                ...cached.data,
+                cached: true,
+                updating: true,
+                cacheAge: Math.round((Date.now() - cached.timestamp) / 1000)
+            });
+        }
+
+        // Se não há cache, fazer requisição síncrona (primeira vez)
         let loginResult;
         
         if (creds.system === 'rhid') {
-            // Se for coop-vitta ou delta, usar função que exporta CSV
             if (system === 'coop-vitta' || system === 'delta') {
                 const systemName = system === 'coop-vitta' ? 'COOP-VITTA' : 'DELTA';
                 loginResult = await loginRHIDAndExportCSV(creds.username, creds.password, systemName);
             } else {
-                // Para outros sistemas RHID, apenas fazer login
                 loginResult = await loginRHID(creds.username, creds.password);
             }
         } else if (creds.system === 'doctorid') {
             loginResult = await loginDoctorID(creds.username, creds.password);
         } else {
-            clearTimeout(timeout);
             return res.status(400).json({ error: 'Sistema não suportado' });
         }
 
-        clearTimeout(timeout);
-        res.json({
+        const result = {
             success: loginResult.success !== false,
             message: loginResult.success !== false ? 'Login bem-sucedido' : 'Falha no login',
             system: creds.system,
-            data: loginResult.data || null
+            data: loginResult.data || null,
+            cached: false
+        };
+
+        // Salvar no cache
+        cache.logins.set(system, {
+            data: result,
+            timestamp: Date.now(),
+            updating: false
         });
+
+        res.json(result);
     } catch (error) {
-        clearTimeout(timeout);
         console.error('Erro ao verificar login:', error);
+        
+        // Se houver cache, retornar ele mesmo com erro
+        const cached = cache.logins.get(req.params.system);
+        if (cached) {
+            console.log(`[CACHE] ⚠️ Erro ao buscar dados, retornando cache antigo...`);
+            return res.json({
+                ...cached.data,
+                cached: true,
+                error: true,
+                errorMessage: error.message,
+                cacheAge: Math.round((Date.now() - cached.timestamp) / 1000)
+            });
+        }
+        
         if (!res.headersSent) {
             res.status(500).json({ 
                 error: error.message,
