@@ -114,10 +114,13 @@ async function fetchFinanceiroVivaSaude() {
             const updateEl = document.getElementById('viva-saude-financeiro-update');
             const statusEl = document.getElementById('viva-saude-financeiro-status');
             
-            // Exibir detalhes dos meses (UPAs, Valores, Datas, Situações)
+            // Exibir detalhes dos meses (UPAs, Valores, Datas, Situações) - Para o contrato UPAS
             if (data.valores && data.valores.meses) {
+                // Atualizar seção do contrato UPAS se estiver visível
+                const financeiroUPASContent = document.getElementById('financeiro-UPAS-content');
                 const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
-                if (detalhesMesesContainer && Object.keys(data.valores.meses).length > 0) {
+                
+                if (Object.keys(data.valores.meses).length > 0) {
                     let htmlDetalhes = '<div style="margin-bottom: 30px;">';
                     htmlDetalhes += '<h3 style="font-size: 18px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 20px; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 10px;">Detalhes por Mês - UPAS</h3>';
                     
