@@ -276,9 +276,21 @@ async function fetchFinanceiroVivaSaude() {
                     });
                     
                     htmlDetalhes += '</div>';
-                    detalhesMesesContainer.innerHTML = htmlDetalhes;
-                } else if (detalhesMesesContainer) {
-                    detalhesMesesContainer.innerHTML = '';
+                    
+                    // Atualizar ambos os containers se existirem
+                    if (detalhesMesesContainer) {
+                        detalhesMesesContainer.innerHTML = htmlDetalhes;
+                    }
+                    if (financeiroUPASContent) {
+                        financeiroUPASContent.innerHTML = htmlDetalhes;
+                    }
+                } else {
+                    if (detalhesMesesContainer) {
+                        detalhesMesesContainer.innerHTML = '';
+                    }
+                    if (financeiroUPASContent) {
+                        financeiroUPASContent.innerHTML = '<p style="color: rgba(255,255,255,0.5);">Nenhum dado disponível.</p>';
+                    }
                 }
             }
             
@@ -619,6 +631,73 @@ async function fetchFinanceiroVivaSaude() {
     }
 }
 
+// Gerenciar Contratos Viva Saúde
+function initializeContratosVivaSaude() {
+    const contratoBtns = document.querySelectorAll('.contrato-btn');
+    const financeiroContratosContainer = document.getElementById('viva-saude-financeiro-contratos');
+    
+    if (!financeiroContratosContainer) return;
+    
+    contratoBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const contrato = btn.getAttribute('data-contrato');
+            
+            // Toggle active state
+            btn.classList.toggle('active');
+            
+            // Mostrar/ocultar seção de financeiro do contrato
+            let section = document.getElementById(`financeiro-${contrato}`);
+            
+            if (!section) {
+                // Criar seção se não existir
+                section = document.createElement('div');
+                section.id = `financeiro-${contrato}`;
+                section.className = 'financeiro-contrato-section';
+                section.innerHTML = `
+                    <h4 style="font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        Financeiro - ${contrato}
+                    </h4>
+                    <div id="financeiro-${contrato}-content">
+                        ${contrato === 'UPAS' ? '<p style="color: rgba(255,255,255,0.7);">Carregando dados...</p>' : '<p style="color: rgba(255,255,255,0.5);">Dados ainda não disponíveis para este contrato.</p>'}
+                    </div>
+                `;
+                financeiroContratosContainer.appendChild(section);
+            }
+            
+            // Toggle visibility
+            section.classList.toggle('active');
+            
+            // Se for UPAS e estiver sendo mostrado, carregar dados
+            if (contrato === 'UPAS' && section.classList.contains('active')) {
+                loadFinanceiroContrato('UPAS');
+            }
+        });
+    });
+}
+
+// Carregar financeiro de um contrato específico
+function loadFinanceiroContrato(contrato) {
+    if (contrato !== 'UPAS') {
+        // Por enquanto só temos dados do UPAS
+        return;
+    }
+    
+    // Reutilizar dados já carregados do fetchFinanceiroVivaSaude
+    // Os dados já estão sendo exibidos no financeiro geral
+    // Aqui podemos duplicar ou referenciar
+    const contentContainer = document.getElementById(`financeiro-${contrato}-content`);
+    if (!contentContainer) return;
+    
+    // Se já temos dados carregados, usar eles
+    const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
+    if (detalhesMesesContainer && detalhesMesesContainer.innerHTML) {
+        contentContainer.innerHTML = detalhesMesesContainer.innerHTML;
+    } else {
+        // Se não tem dados, buscar
+        fetchFinanceiroVivaSaude();
+    }
+}
+
 // Menu Mobile
 function initializeMobileMenu() {
     const mobileMenuBtn = document.getElementById('mobileMenuBtn');
@@ -662,6 +741,7 @@ function initializeMobileMenu() {
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
     initializeMobileMenu();
+    initializeContratosVivaSaude();
     initializeEventListeners();
     checkServerHealth();
     
