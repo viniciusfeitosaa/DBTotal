@@ -701,16 +701,27 @@ function loadFinanceiroContrato(contrato) {
         return;
     }
     
-    // Reutilizar dados já carregados do fetchFinanceiroVivaSaude
-    // Os dados já estão sendo exibidos no financeiro geral
-    // Aqui podemos duplicar ou referenciar
     const contentContainer = document.getElementById(`financeiro-${contrato}-content`);
     if (!contentContainer) return;
     
     // Se já temos dados carregados, usar eles
     const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
+    const valoresContainer = document.getElementById('viva-saude-financeiro-valores');
+    
+    let html = '';
+    
+    // Adicionar resumo dos meses em aberto (se disponível)
+    if (valoresContainer && valoresContainer.innerHTML) {
+        html += valoresContainer.innerHTML;
+    }
+    
+    // Adicionar detalhes dos meses (se disponível)
     if (detalhesMesesContainer && detalhesMesesContainer.innerHTML) {
-        contentContainer.innerHTML = detalhesMesesContainer.innerHTML;
+        html += detalhesMesesContainer.innerHTML;
+    }
+    
+    if (html) {
+        contentContainer.innerHTML = html;
     } else {
         // Se não tem dados, buscar
         fetchFinanceiroVivaSaude();
