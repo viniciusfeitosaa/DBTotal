@@ -437,6 +437,31 @@ body {
 .card-actions {
     display: flex;
     gap: 8px;
+    margin-left: auto;
+}
+
+.fullscreen-btn {
+    position: relative;
+}
+
+.fullscreen-btn svg {
+    transition: all 0.3s ease;
+}
+
+.fullscreen-btn:hover svg {
+    transform: scale(1.1);
+}
+
+.fullscreen-btn.active .fullscreen-icon {
+    display: none;
+}
+
+.fullscreen-btn.active .fullscreen-exit-icon {
+    display: block !important;
+}
+
+.fullscreen-btn:not(.active) .fullscreen-exit-icon {
+    display: none !important;
 }
 
 .icon-btn {

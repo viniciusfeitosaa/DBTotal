@@ -619,6 +619,62 @@ async function fetchFinanceiroVivaSaude() {
     }
 }
 
+// Fullscreen Functionality
+function initializeFullscreen() {
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    const geralCard = document.getElementById('geral-card');
+    
+    if (!fullscreenBtn || !geralCard) return;
+    
+    function toggleFullscreen() {
+        if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
+            // Entrar em tela cheia
+            if (geralCard.requestFullscreen) {
+                geralCard.requestFullscreen();
+            } else if (geralCard.webkitRequestFullscreen) {
+                geralCard.webkitRequestFullscreen();
+            } else if (geralCard.mozRequestFullScreen) {
+                geralCard.mozRequestFullScreen();
+            } else if (geralCard.msRequestFullscreen) {
+                geralCard.msRequestFullscreen();
+            }
+        } else {
+            // Sair de tela cheia
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.mozCancelFullScreen) {
+                document.mozCancelFullScreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        }
+    }
+    
+    // Atualizar estado do botão quando entrar/sair de fullscreen
+    function updateFullscreenButton() {
+        const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+        if (isFullscreen) {
+            fullscreenBtn.classList.add('active');
+        } else {
+            fullscreenBtn.classList.remove('active');
+        }
+    }
+    
+    // Event listeners
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
+    
+    // Detectar mudanças no estado de fullscreen
+    document.addEventListener('fullscreenchange', updateFullscreenButton);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+    document.addEventListener('mozfullscreenchange', updateFullscreenButton);
+    document.addEventListener('MSFullscreenChange', updateFullscreenButton);
+    
+    // Atualizar estado inicial
+    updateFullscreenButton();
+}
+
 // Menu Mobile
 function initializeMobileMenu() {
     const mobileMenuBtn = document.getElementById('mobileMenuBtn');
@@ -662,6 +718,7 @@ function initializeMobileMenu() {
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
     initializeMobileMenu();
+    initializeFullscreen();
     initializeEventListeners();
     checkServerHealth();
     
