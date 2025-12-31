@@ -622,26 +622,33 @@ async function fetchFinanceiroVivaSaude() {
 // Fullscreen Functionality
 function initializeFullscreen() {
     const fullscreenBtn = document.getElementById('fullscreen-btn');
-    const geralCard = document.getElementById('geral-card');
     
-    if (!fullscreenBtn || !geralCard) return;
+    if (!fullscreenBtn) return;
     
     function toggleFullscreen() {
-        if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
-            // Entrar em tela cheia
-            if (geralCard.requestFullscreen) {
-                geralCard.requestFullscreen();
-            } else if (geralCard.webkitRequestFullscreen) {
-                geralCard.webkitRequestFullscreen();
-            } else if (geralCard.mozRequestFullScreen) {
-                geralCard.mozRequestFullScreen();
-            } else if (geralCard.msRequestFullscreen) {
-                geralCard.msRequestFullscreen();
+        const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+        
+        if (!isFullscreen) {
+            // Entrar em tela cheia - usar document.documentElement para tela cheia da página toda
+            const element = document.documentElement;
+            
+            if (element.requestFullscreen) {
+                element.requestFullscreen().catch(err => {
+                    console.error('Erro ao entrar em tela cheia:', err);
+                });
+            } else if (element.webkitRequestFullscreen) {
+                element.webkitRequestFullscreen();
+            } else if (element.mozRequestFullScreen) {
+                element.mozRequestFullScreen();
+            } else if (element.msRequestFullscreen) {
+                element.msRequestFullscreen();
             }
         } else {
             // Sair de tela cheia
             if (document.exitFullscreen) {
-                document.exitFullscreen();
+                document.exitFullscreen().catch(err => {
+                    console.error('Erro ao sair de tela cheia:', err);
+                });
             } else if (document.webkitExitFullscreen) {
                 document.webkitExitFullscreen();
             } else if (document.mozCancelFullScreen) {
@@ -663,7 +670,10 @@ function initializeFullscreen() {
     }
     
     // Event listeners
-    fullscreenBtn.addEventListener('click', toggleFullscreen);
+    fullscreenBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        toggleFullscreen();
+    });
     
     // Detectar mudanças no estado de fullscreen
     document.addEventListener('fullscreenchange', updateFullscreenButton);
