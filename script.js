@@ -280,12 +280,27 @@ async function fetchFinanceiroVivaSaude() {
                     
                     htmlDetalhes += '</div>';
                     
-                    // Atualizar ambos os containers se existirem
+                    // Atualizar container de detalhes
                     if (detalhesMesesContainer) {
                         detalhesMesesContainer.innerHTML = htmlDetalhes;
                     }
+                    
+                    // Atualizar seção do contrato UPAS se existir e estiver visível
+                    const financeiroUPASContent = document.getElementById('financeiro-UPAS-content');
                     if (financeiroUPASContent) {
-                        financeiroUPASContent.innerHTML = htmlDetalhes;
+                        // Verificar se já tem resumo dos meses
+                        const valoresContainer = document.getElementById('viva-saude-financeiro-valores');
+                        let htmlUPAS = '';
+                        
+                        // Se houver resumo dos meses, adicionar primeiro
+                        if (valoresContainer && valoresContainer.innerHTML) {
+                            htmlUPAS = valoresContainer.innerHTML;
+                        }
+                        
+                        // Adicionar detalhes dos meses depois
+                        htmlUPAS += htmlDetalhes;
+                        
+                        financeiroUPASContent.innerHTML = htmlUPAS;
                     }
                 } else {
                     if (detalhesMesesContainer) {
@@ -541,6 +556,21 @@ async function fetchFinanceiroVivaSaude() {
                     
                     html += '</div>';
                     valoresContainer.innerHTML = html;
+                    
+                    // Também atualizar na seção do contrato UPAS se estiver visível
+                    const financeiroUPASContent = document.getElementById('financeiro-UPAS-content');
+                    if (financeiroUPASContent) {
+                        // Verificar se já tem conteúdo (detalhes dos meses)
+                        const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
+                        let htmlUPAS = html;
+                        
+                        // Se houver detalhes dos meses, adicionar depois do resumo
+                        if (detalhesMesesContainer && detalhesMesesContainer.innerHTML) {
+                            htmlUPAS += detalhesMesesContainer.innerHTML;
+                        }
+                        
+                        financeiroUPASContent.innerHTML = htmlUPAS;
+                    }
                 }
             }
             
