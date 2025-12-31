@@ -682,7 +682,8 @@ function initializeContratosVivaSaude() {
         return;
     }
     
-    contratosCard.addEventListener('click', (e) => {
+    // Função para processar clique/toque no contrato
+    function handleContratoClick(e) {
         const btn = e.target.closest('.contrato-btn');
         if (!btn) return;
         
@@ -690,7 +691,7 @@ function initializeContratosVivaSaude() {
         e.stopPropagation();
         
         const contrato = btn.getAttribute('data-contrato');
-        console.log('[CONTRATOS] Clique no contrato:', contrato);
+        console.log('[CONTRATOS] Clique/toque no contrato:', contrato);
         
         // Toggle active state
         btn.classList.toggle('active');
@@ -721,6 +722,13 @@ function initializeContratosVivaSaude() {
         if (contrato === 'UPAS' && section.classList.contains('active')) {
             loadFinanceiroContrato('UPAS');
         }
+    }
+    
+    // Adicionar eventos para desktop e mobile
+    contratosCard.addEventListener('click', handleContratoClick);
+    contratosCard.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        handleContratoClick(e);
     });
     
     console.log('[CONTRATOS] Event listeners configurados');
