@@ -619,72 +619,6 @@ async function fetchFinanceiroVivaSaude() {
     }
 }
 
-// Fullscreen Functionality
-function initializeFullscreen() {
-    const fullscreenBtn = document.getElementById('fullscreen-btn');
-    
-    if (!fullscreenBtn) return;
-    
-    function toggleFullscreen() {
-        const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
-        
-        if (!isFullscreen) {
-            // Entrar em tela cheia - usar document.documentElement para tela cheia da página toda
-            const element = document.documentElement;
-            
-            if (element.requestFullscreen) {
-                element.requestFullscreen().catch(err => {
-                    console.error('Erro ao entrar em tela cheia:', err);
-                });
-            } else if (element.webkitRequestFullscreen) {
-                element.webkitRequestFullscreen();
-            } else if (element.mozRequestFullScreen) {
-                element.mozRequestFullScreen();
-            } else if (element.msRequestFullscreen) {
-                element.msRequestFullscreen();
-            }
-        } else {
-            // Sair de tela cheia
-            if (document.exitFullscreen) {
-                document.exitFullscreen().catch(err => {
-                    console.error('Erro ao sair de tela cheia:', err);
-                });
-            } else if (document.webkitExitFullscreen) {
-                document.webkitExitFullscreen();
-            } else if (document.mozCancelFullScreen) {
-                document.mozCancelFullScreen();
-            } else if (document.msExitFullscreen) {
-                document.msExitFullscreen();
-            }
-        }
-    }
-    
-    // Atualizar estado do botão quando entrar/sair de fullscreen
-    function updateFullscreenButton() {
-        const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
-        if (isFullscreen) {
-            fullscreenBtn.classList.add('active');
-        } else {
-            fullscreenBtn.classList.remove('active');
-        }
-    }
-    
-    // Event listeners
-    fullscreenBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        toggleFullscreen();
-    });
-    
-    // Detectar mudanças no estado de fullscreen
-    document.addEventListener('fullscreenchange', updateFullscreenButton);
-    document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
-    document.addEventListener('mozfullscreenchange', updateFullscreenButton);
-    document.addEventListener('MSFullscreenChange', updateFullscreenButton);
-    
-    // Atualizar estado inicial
-    updateFullscreenButton();
-}
-
 // Menu Mobile
 function initializeMobileMenu() {
     const mobileMenuBtn = document.getElementById('mobileMenuBtn');
@@ -728,7 +662,6 @@ function initializeMobileMenu() {
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
     initializeMobileMenu();
-    initializeFullscreen();
     initializeEventListeners();
     checkServerHealth();
     
