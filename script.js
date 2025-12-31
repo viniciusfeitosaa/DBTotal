@@ -300,6 +300,8 @@ async function fetchFinanceiroVivaSaude() {
             // Exibir valores extraídos do CSV
             if (data.valores) {
                 const valoresContainer = document.getElementById('viva-saude-financeiro-valores');
+                const financeiroUPASContent = document.getElementById('financeiro-UPAS-content');
+                
                 if (valoresContainer) {
                     // Layout em coluna (um abaixo do outro)
                     let html = '<div style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">';
