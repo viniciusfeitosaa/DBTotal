@@ -782,12 +782,21 @@ table tbody tr.odd-row {
 /* Botões de Contrato */
 .contrato-btn {
     font-family: 'Poppins', sans-serif;
+    position: relative;
+    z-index: 1;
+    pointer-events: auto;
+    border: none;
+    outline: none;
 }
 
 .contrato-btn:hover {
     background: rgba(37, 99, 235, 0.15) !important;
     border-color: var(--primary) !important;
     transform: translateY(-2px);
+}
+
+.contrato-btn:active {
+    transform: translateY(0);
 }
 
 .contrato-btn.active {
@@ -801,6 +810,11 @@ table tbody tr.odd-row {
 
 .contrato-btn svg {
     transition: transform 0.3s ease;
+    pointer-events: none;
+}
+
+.contrato-btn span {
+    pointer-events: none;
 }
 
 /* Seção de Financeiro por Contrato */
