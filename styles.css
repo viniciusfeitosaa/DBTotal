@@ -453,6 +453,23 @@ body {
     cursor: pointer;
     transition: all 0.3s ease;
     text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+.refresh-page-btn:hover {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+    transform: rotate(180deg);
+}
+
+.refresh-page-btn:active {
+    transform: rotate(180deg) scale(0.95);
+}
+
+.refresh-page-btn svg {
+    transition: transform 0.3s ease;
 }
 
 .icon-btn svg {

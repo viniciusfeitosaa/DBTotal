@@ -808,9 +808,43 @@ function initializeMobileMenu() {
     });
 }
 
+// Botão de Atualizar Página (limpar cache)
+function initializeRefreshButton() {
+    const refreshBtn = document.getElementById('refreshPageBtn');
+    if (!refreshBtn) return;
+    
+    refreshBtn.addEventListener('click', () => {
+        // Forçar atualização sem cache
+        // Método 1: location.reload(true) - funciona na maioria dos navegadores
+        // Método 2: Adicionar timestamp à URL e recarregar
+        if (window.location.reload) {
+            // Tentar reload forçado
+            window.location.reload(true);
+        } else {
+            // Fallback: adicionar timestamp e recarregar
+            const url = new URL(window.location.href);
+            url.searchParams.set('_refresh', Date.now());
+            window.location.href = url.toString();
+        }
+    });
+    
+    // Também adicionar suporte a touch para mobile
+    refreshBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        if (window.location.reload) {
+            window.location.reload(true);
+        } else {
+            const url = new URL(window.location.href);
+            url.searchParams.set('_refresh', Date.now());
+            window.location.href = url.toString();
+        }
+    });
+}
+
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
     initializeMobileMenu();
+    initializeRefreshButton();
     initializeContratosVivaSaude();
     initializeEventListeners();
     checkServerHealth();
