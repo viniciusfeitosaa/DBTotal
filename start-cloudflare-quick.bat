@@ -4,16 +4,23 @@ echo   Cloudflare Quick Tunnel - DBTotal
 echo ========================================
 echo.
 
-REM Verificar se cloudflared está instalado
-where cloudflared >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [ERRO] cloudflared nao encontrado!
-    echo.
-    echo Instale executando:
-    echo   PowerShell -ExecutionPolicy Bypass -File instalar-cloudflared.ps1
-    echo.
-    pause
-    exit /b 1
+REM Verificar se cloudflared está na pasta local ou no PATH
+set CLOUDFLARED_CMD=cloudflared
+if exist "cloudflared.exe" (
+    set CLOUDFLARED_CMD=.\cloudflared.exe
+    echo [OK] cloudflared.exe encontrado na pasta local
+) else (
+    where cloudflared >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo [ERRO] cloudflared nao encontrado!
+        echo.
+        echo Instale executando:
+        echo   PowerShell -ExecutionPolicy Bypass -File instalar-cloudflared.ps1
+        echo   ou baixe cloudflared.exe e coloque nesta pasta
+        echo.
+        pause
+        exit /b 1
+    )
 )
 
 REM Verificar se servidor está rodando
@@ -46,7 +53,7 @@ echo.
 echo ========================================
 echo.
 
-cloudflared tunnel --url http://localhost:3000
+%CLOUDFLARED_CMD% tunnel --url http://localhost:3000
 
 pause
 
