@@ -2715,8 +2715,20 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
         }
         
         console.log('[GOOGLE SHEETS] Resultado:', result.success ? '✅ Sucesso' : '❌ Falha');
-        if (result.valores) {
-            console.log('[GOOGLE SHEETS] Valores extraídos:', JSON.stringify(result.valores, null, 2));
+        
+        // Verificar se o resultado tem a nova estrutura com múltiplos contratos
+        if (result.contratos) {
+            console.log('[GOOGLE SHEETS] Dados de múltiplos contratos extraídos:', Object.keys(result.contratos));
+            // Log resumido de cada contrato
+            for (const [contrato, dados] of Object.entries(result.contratos)) {
+                if (dados.success) {
+                    console.log(`[GOOGLE SHEETS] ✅ ${contrato}: ${dados.valores?.meses ? Object.keys(dados.valores.meses).length : 0} meses`);
+                } else {
+                    console.log(`[GOOGLE SHEETS] ❌ ${contrato}: ${dados.error || 'Erro desconhecido'}`);
+                }
+            }
+        } else if (result.valores) {
+            console.log('[GOOGLE SHEETS] Valores extraídos (formato antigo):', JSON.stringify(result.valores, null, 2));
         }
         
         // Salvar no cache

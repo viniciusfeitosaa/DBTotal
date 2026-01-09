@@ -86,11 +86,12 @@ def setup_driver():
             print(f"Erro ao configurar driver (fallback): {e2}", file=sys.stderr)
             return None
 
-def extract_financial_data(driver, url):
-    """Extrair dados financeiros do Google Sheets"""
+def extract_financial_data(driver, url, contrato_nome=None):
+    """Extrair dados financeiros do Google Sheets para um contrato específico"""
     result = {
         "success": False,
         "message": "",
+        "contrato": contrato_nome or "UPAS",
         "valores": {
             "vivaRioEmAberto": None,
             "setembro": None,
@@ -126,8 +127,10 @@ def extract_financial_data(driver, url):
         print("[GOOGLE SHEETS] Aguardando planilha renderizar...", file=sys.stderr)
         time.sleep(2)  # Reduzido de 5s para 2s
         
-        # Tentar encontrar a aba "RELATÓRIO CYLLA" (timeout reduzido)
-        print("[GOOGLE SHEETS] Procurando aba 'RELATÓRIO CYLLA'...", file=sys.stderr)
+        # Tentar encontrar a aba do contrato (timeout reduzido)
+        # Se contrato_nome não foi especificado, usar "RELATÓRIO CYLLA" (UPAS) como padrão
+        nome_aba_busca = contrato_nome if contrato_nome else "RELATÓRIO CYLLA"
+        print(f"[GOOGLE SHEETS] Procurando aba '{nome_aba_busca}'...", file=sys.stderr)
         try:
             # Procurar por abas (sheets tabs)
             aba_encontrada = False
@@ -135,10 +138,10 @@ def extract_financial_data(driver, url):
             
             # Tentar diferentes seletores para encontrar as abas
             aba_selectors = [
-                "//span[contains(text(), 'RELATÓRIO CYLLA')]",  # Mais comum, tentar primeiro
-                "//div[@role='tab' and contains(text(), 'RELATÓRIO CYLLA')]",
-                "//div[contains(@class, 'docs-sheet-tab') and contains(text(), 'RELATÓRIO CYLLA')]",
-                "//div[contains(@class, 'sheet-tab') and contains(text(), 'RELATÓRIO CYLLA')]"
+                f"//span[contains(text(), '{nome_aba_busca}')]",  # Mais comum, tentar primeiro
+                f"//div[@role='tab' and contains(text(), '{nome_aba_busca}')]",
+                f"//div[contains(@class, 'docs-sheet-tab') and contains(text(), '{nome_aba_busca}')]",
+                f"//div[contains(@class, 'sheet-tab') and contains(text(), '{nome_aba_busca}')]"
             ]
             
             for selector in aba_selectors:
@@ -154,7 +157,7 @@ def extract_financial_data(driver, url):
                     continue
             
             if not aba_encontrada:
-                print("[GOOGLE SHEETS] ⚠️ Aba 'RELATÓRIO CYLLA' não encontrada, tentando continuar...", file=sys.stderr)
+                print(f"[GOOGLE SHEETS] ⚠️ Aba '{nome_aba_busca}' não encontrada, tentando continuar...", file=sys.stderr)
         except Exception as e:
             print(f"[GOOGLE SHEETS] Erro ao procurar aba: {e}", file=sys.stderr)
         
@@ -893,6 +896,40 @@ def process_csv(csv_content):
     
     return valores
 
+def extract_all_contratos(driver, url):
+    """Extrair dados de todos os contratos"""
+    contratos = {
+        "UPAS": "RELATÓRIO CYLLA",
+        "CPSS": "CPSS",
+        "EVOLUIR": "EVOLUIR",
+        "CRATEÚS": "CRATEÚS",
+        "ITAPIPOCA": "ITAPIPOCA"
+    }
+    
+    resultados = {}
+    
+    for contrato_nome, aba_nome in contratos.items():
+        print(f"[GOOGLE SHEETS] Extraindo dados do contrato: {contrato_nome} (aba: {aba_nome})", file=sys.stderr)
+        try:
+            resultado = extract_financial_data(driver, url, contrato_nome)
+            resultados[contrato_nome] = resultado
+            print(f"[GOOGLE SHEETS] ✅ Dados do contrato {contrato_nome} extraídos com sucesso", file=sys.stderr)
+        except Exception as e:
+            print(f"[GOOGLE SHEETS] ❌ Erro ao extrair dados do contrato {contrato_nome}: {e}", file=sys.stderr)
+            resultados[contrato_nome] = {
+                "success": False,
+                "contrato": contrato_nome,
+                "error": str(e),
+                "valores": {}
+            }
+        time.sleep(2)  # Aguardar entre extrações
+    
+    return {
+        "success": any(r.get("success", False) for r in resultados.values()),
+        "message": "Dados extraídos de todos os contratos",
+        "contratos": resultados
+    }
+
 def main():
     """Função principal"""
     url = "https://docs.google.com/spreadsheets/d/10vaVp0DcgOfjWW3_vat7M8mRVvMiBdtU9kAlDmjEioc/edit?usp=sharing"
@@ -960,10 +997,11 @@ def main():
             else:
                 sys.exit(0)
         
-        print("[GOOGLE SHEETS] Driver configurado, extraindo dados...", file=sys.stderr)
+        print("[GOOGLE SHEETS] Driver configurado, extraindo dados de todos os contratos...", file=sys.stderr)
         sys.stderr.flush()
         
-        result = extract_financial_data(driver, url)
+        # Extrair dados de todos os contratos
+        result = extract_all_contratos(driver, url)
         
         # Garantir que JSON vai para stdout (sem indent para evitar problemas)
         json_output = json.dumps(result, ensure_ascii=False)

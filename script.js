@@ -114,8 +114,32 @@ async function fetchFinanceiroVivaSaude() {
             const updateEl = document.getElementById('viva-saude-financeiro-update');
             const statusEl = document.getElementById('viva-saude-financeiro-status');
             
-            // Exibir detalhes dos meses (UPAs, Valores, Datas, Situações) - Para o contrato UPAS
-            if (data.valores && data.valores.meses) {
+            // Verificar se temos dados de múltiplos contratos (nova estrutura)
+            if (data.contratos) {
+                // Armazenar dados de todos os contratos globalmente
+                window.vivaSaudeContratosData = data.contratos;
+                
+                // Calcular total geral de todos os contratos
+                let totalGeral = 0;
+                for (const [contrato, dadosContrato] of Object.entries(data.contratos)) {
+                    if (dadosContrato.success && dadosContrato.valores && dadosContrato.valores.total) {
+                        const valorTotal = parseFloat(dadosContrato.valores.total.replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
+                        totalGeral += valorTotal;
+                    }
+                }
+                
+                // Atualizar total geral
+                if (totalEl) {
+                    totalEl.textContent = totalGeral > 0 ? `R$ ${totalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
+                }
+                
+                // Renderizar dados do contrato UPAS por padrão (se disponível)
+                if (data.contratos.UPAS && data.contratos.UPAS.success) {
+                    renderizarDadosContrato('UPAS', data.contratos.UPAS.valores);
+                }
+            }
+            // Compatibilidade com estrutura antiga (apenas UPAS)
+            else if (data.valores && data.valores.meses) {
                 // Atualizar seção do contrato UPAS se estiver visível
                 const financeiroUPASContent = document.getElementById('financeiro-UPAS-content');
                 const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
@@ -718,9 +742,9 @@ function initializeContratosVivaSaude() {
         // Toggle visibility
         section.classList.toggle('active');
         
-        // Se for UPAS e estiver sendo mostrado, carregar dados
-        if (contrato === 'UPAS' && section.classList.contains('active')) {
-            loadFinanceiroContrato('UPAS');
+        // Se estiver sendo mostrado, carregar dados do contrato
+        if (section.classList.contains('active')) {
+            loadFinanceiroContrato(contrato);
         }
     }
     
