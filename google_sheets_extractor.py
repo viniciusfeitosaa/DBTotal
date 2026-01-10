@@ -177,49 +177,47 @@ def extract_financial_data(driver, url, contrato_nome=None):
             gid = None
             try:
                 # Aguardar um pouco mais para garantir que a aba foi carregada
-                time.sleep(1)
+                time.sleep(2)
                 gid = driver.execute_script("""
-                    // Aguardar um pouco para garantir que a aba foi carregada
-                    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+                    // Método 1: Buscar na URL primeiro (mais confiável)
+                    const urlMatch = window.location.href.match(/[#&]gid=([0-9]+)/);
+                    if (urlMatch) {
+                        return urlMatch[1];
+                    }
                     
-                    // Tentar encontrar o GID da aba ativa de várias formas
-                    async function getActiveSheetId() {
-                        // Método 1: Buscar na URL
-                        const urlMatch = window.location.href.match(/[#&]gid=([0-9]+)/);
-                        if (urlMatch) {
-                            return urlMatch[1];
-                        }
-                        
-                        // Método 2: Buscar nas abas visíveis
-                        await sleep(500);
-                        const tabs = Array.from(document.querySelectorAll('[role="tab"], [data-sheet-id], .docs-sheet-tab, .docs-sheet-tab-name'));
-                        for (let tab of tabs) {
-                            if (tab.getAttribute('aria-selected') === 'true' || 
-                                tab.classList.contains('docs-sheet-active') ||
-                                tab.classList.contains('docs-sheet-tab-active') ||
-                                tab.style.background !== '') {
-                                const sheetId = tab.getAttribute('data-sheet-id') || 
-                                              tab.getAttribute('data-sheetid') ||
-                                              tab.getAttribute('data-gid') ||
-                                              tab.getAttribute('id');
-                                if (sheetId && !isNaN(parseInt(sheetId))) {
-                                    return sheetId;
-                                }
+                    // Método 2: Buscar nas abas visíveis
+                    const tabs = Array.from(document.querySelectorAll('[role="tab"], [data-sheet-id], .docs-sheet-tab, .docs-sheet-tab-name'));
+                    for (let tab of tabs) {
+                        if (tab.getAttribute('aria-selected') === 'true' || 
+                            tab.classList.contains('docs-sheet-active') ||
+                            tab.classList.contains('docs-sheet-tab-active')) {
+                            const sheetId = tab.getAttribute('data-sheet-id') || 
+                                          tab.getAttribute('data-sheetid') ||
+                                          tab.getAttribute('data-gid') ||
+                                          tab.getAttribute('id');
+                            if (sheetId) {
+                                // Extrair apenas números se houver
+                                const numMatch = sheetId.toString().match(/\\d+/);
+                                if (numMatch) return numMatch[0];
+                                return sheetId;
                             }
                         }
-                        
-                        // Método 3: Buscar em elementos internos
-                        const activeTab = document.querySelector('.docs-sheet-tab-active, [aria-selected="true"]');
-                        if (activeTab) {
-                            const sheetId = activeTab.getAttribute('data-sheet-id') || 
-                                          activeTab.getAttribute('data-sheetid') ||
-                                          activeTab.getAttribute('data-gid');
-                            if (sheetId) return sheetId;
-                        }
-                        
-                        return '0';
                     }
-                    return getActiveSheetId();
+                    
+                    // Método 3: Buscar em elementos internos
+                    const activeTab = document.querySelector('.docs-sheet-tab-active, [aria-selected="true"]');
+                    if (activeTab) {
+                        const sheetId = activeTab.getAttribute('data-sheet-id') || 
+                                      activeTab.getAttribute('data-sheetid') ||
+                                      activeTab.getAttribute('data-gid');
+                        if (sheetId) {
+                            const numMatch = sheetId.toString().match(/\\d+/);
+                            if (numMatch) return numMatch[0];
+                            return sheetId;
+                        }
+                    }
+                    
+                    return '0';
                 """)
                 print(f"[GOOGLE SHEETS] GID encontrado via JS: {gid}", file=sys.stderr)
             except Exception as js_error:
