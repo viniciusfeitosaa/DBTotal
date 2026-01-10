@@ -1002,10 +1002,22 @@ function loadFinanceiroContrato(contrato) {
         const dadosContrato = window.vivaSaudeContratosData[contrato];
         console.log(`[CONTRATOS] Carregando dados do contrato ${contrato}:`, dadosContrato);
         
+        // Verificar se há meses encontrados (principal dado)
+        const mesesEncontrados = dadosContrato.valores?.meses ? Object.keys(dadosContrato.valores.meses).length : 0;
+        
         if (dadosContrato.success && dadosContrato.valores) {
+            const meses = Object.keys(dadosContrato.valores.meses || {});
+            console.log(`[CONTRATOS] Renderizando ${contrato}: ${meses.length} meses encontrados (${meses.join(', ')})`);
+            renderizarDadosContrato(contrato, dadosContrato.valores);
+            return;
+        } else if (mesesEncontrados > 0 && dadosContrato.valores) {
+            // Mesmo se success=False, mas há meses encontrados, renderizar
+            const meses = Object.keys(dadosContrato.valores.meses || {});
+            console.log(`[CONTRATOS] Renderizando ${contrato} mesmo com success=False: ${meses.length} meses encontrados (${meses.join(', ')})`);
             renderizarDadosContrato(contrato, dadosContrato.valores);
             return;
         } else {
+            console.warn(`[CONTRATOS] Dados não disponíveis para ${contrato}:`, dadosContrato);
             contentContainer.innerHTML = `<p style="color: rgba(255,255,255,0.5);">Erro ao carregar dados: ${dadosContrato.error || 'Dados não disponíveis'}</p>`;
             return;
         }
