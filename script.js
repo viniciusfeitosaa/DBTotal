@@ -142,6 +142,46 @@ async function fetchFinanceiroVivaSaude() {
                     updateEl.textContent = new Date().toLocaleString('pt-BR');
                 }
                 
+                // Exibir valor em aberto do UPAS
+                const valoresContainer = document.getElementById('viva-saude-financeiro-valores');
+                if (valoresContainer && data.contratos.UPAS && data.contratos.UPAS.success) {
+                    const valorAberto = data.contratos.UPAS.valores?.vivaRioEmAberto;
+                    if (valorAberto && valorAberto !== "Encontrado" && valorAberto !== "Não encontrado") {
+                        const formatarValor = (valor) => {
+                            if (!valor || typeof valor === 'string' && (valor.trim() === '' || valor.trim() === 'R$')) {
+                                return 'R$ 0,00';
+                            }
+                            let valorLimpo = valor.toString().replace(/R\$\s*/g, '').trim();
+                            if (!valorLimpo || valorLimpo === '') {
+                                return 'R$ 0,00';
+                            }
+                            try {
+                                let numero = valorLimpo.replace(/\./g, '').replace(',', '.');
+                                numero = parseFloat(numero);
+                                if (isNaN(numero)) {
+                                    return valor;
+                                }
+                                return new Intl.NumberFormat('pt-BR', {
+                                    style: 'currency',
+                                    currency: 'BRL'
+                                }).format(numero);
+                            } catch (e) {
+                                return valor;
+                            }
+                        };
+                        
+                        valoresContainer.innerHTML = `
+                            <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px; border-left: 4px solid #f59e0b;">
+                                <h3 style="font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 10px;">Resumo dos Meses em Aberto - UPAS</h3>
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <span style="color: rgba(255,255,255,0.7);">Valor em Aberto:</span>
+                                    <span style="color: #f59e0b; font-weight: 700; font-size: 18px;">${formatarValor(valorAberto)}</span>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+                
                 // Renderizar dados do contrato UPAS por padrão (se disponível)
                 if (data.contratos.UPAS && data.contratos.UPAS.success) {
                     renderizarDadosContrato('UPAS', data.contratos.UPAS.valores);

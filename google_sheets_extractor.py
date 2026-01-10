@@ -1033,9 +1033,12 @@ def extract_all_contratos(driver, url):
             resultado["contrato"] = contrato_nome
             resultados[contrato_nome] = resultado
             if resultado.get("success"):
-                print(f"[GOOGLE SHEETS] ✅ Dados do contrato {contrato_nome} extraídos com sucesso", file=sys.stderr)
+                meses_encontrados = len(resultado.get("valores", {}).get("meses", {}))
+                valor_aberto = resultado.get("valores", {}).get("vivaRioEmAberto", "Não encontrado")
+                print(f"[GOOGLE SHEETS] ✅ Dados do contrato {contrato_nome} extraídos: {meses_encontrados} meses, valor em aberto: {valor_aberto}", file=sys.stderr)
             else:
-                print(f"[GOOGLE SHEETS] ⚠️ Contrato {contrato_nome} não retornou sucesso: {resultado.get('error', 'Erro desconhecido')}", file=sys.stderr)
+                meses_encontrados = len(resultado.get("valores", {}).get("meses", {}))
+                print(f"[GOOGLE SHEETS] ⚠️ Contrato {contrato_nome} não retornou sucesso: {resultado.get('error', 'Erro desconhecido')} (meses encontrados: {meses_encontrados})", file=sys.stderr)
         except Exception as e:
             print(f"[GOOGLE SHEETS] ❌ Erro ao extrair dados do contrato {contrato_nome}: {e}", file=sys.stderr)
             import traceback
