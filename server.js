@@ -2823,12 +2823,15 @@ app.post('/api/check-login/:system', async (req, res) => {
             console.log(`[CACHE] ✅ Retornando dados do cache para ${system} (${Math.round((Date.now() - cached.timestamp) / 1000)}s atrás)`);
             // Verificar se os dados são do sistema correto
             if (cached.data.systemKey === system) {
+                // Validação adicional: verificar se há dados válidos
+                const totalRegistros = cached.data.data?.total || 0;
+                console.log(`[CACHE] 📊 Cache válido para ${system}: ${totalRegistros} registros, systemKey=${cached.data.systemKey}, system=${system}`);
                 return res.json({
                     ...cached.data,
                     cached: true
                 });
             } else {
-                console.log(`[CACHE] ⚠️ Cache de ${system} tem systemKey incorreto, limpando...`);
+                console.log(`[CACHE] ⚠️ Cache de ${system} tem systemKey incorreto (esperado: ${system}, encontrado: ${cached.data.systemKey}), limpando...`);
                 cache.logins.delete(system);
             }
         }
@@ -2874,13 +2877,28 @@ app.post('/api/check-login/:system', async (req, res) => {
             cached: false
         };
 
-        // Salvar no cache com chave específica do sistema
+        // Validação antes de salvar no cache
+        const totalRegistros = loginResult.data?.total || 0;
+        console.log(`[${system}] ✅ Dados obtidos: ${totalRegistros} registros, systemKey=${system}, system=${creds.system}`);
+
+        // Salvar no cache com chave específica do sistema (garantir que não sobrescreva outro sistema)
+        const previousCache = cache.logins.get(system);
+        if (previousCache && previousCache.data.systemKey !== system) {
+            console.log(`[CACHE] ⚠️ AVISO: Tentativa de sobrescrever cache de ${system} com dados incorretos! Prevendo: ${previousCache.data.systemKey}`);
+        }
+        
         cache.logins.set(system, {
             data: result,
             timestamp: Date.now()
         });
 
-        console.log(`[CACHE] ✅ Dados de ${system} salvos no cache`);
+        // Verificar se foi salvo corretamente
+        const verifyCache = cache.logins.get(system);
+        if (verifyCache && verifyCache.data.systemKey === system) {
+            console.log(`[CACHE] ✅ Dados de ${system} salvos no cache corretamente: ${verifyCache.data.data?.total || 0} registros`);
+        } else {
+            console.error(`[CACHE] ❌ ERRO: Cache de ${system} foi salvo incorretamente! systemKey=${verifyCache?.data?.systemKey || 'undefined'}`);
+        }
 
         res.json(result);
     } catch (error) {
