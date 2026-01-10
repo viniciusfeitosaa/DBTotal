@@ -507,8 +507,13 @@ def extract_financial_data(driver, url, contrato_nome=None):
         
         # Processar CSV se obtido
         if csv_content:
-            print("[GOOGLE SHEETS] Processando CSV...", file=sys.stderr)
+            print(f"[GOOGLE SHEETS] CSV obtido com {len(csv_content)} caracteres, processando...", file=sys.stderr)
+            print(f"[GOOGLE SHEETS] Primeiras 500 caracteres do CSV: {csv_content[:500]}", file=sys.stderr)
             valores = process_csv(csv_content)
+            
+            # Log dos valores extraídos
+            meses_encontrados = len(valores.get("meses", {}))
+            print(f"[GOOGLE SHEETS] Processamento concluído: {meses_encontrados} meses encontrados, valor em aberto: {valores.get('vivaRioEmAberto', 'Não encontrado')}", file=sys.stderr)
             
             # Se temos driver, verificar cores das células para identificar valores negativos
             if driver:
@@ -570,13 +575,34 @@ def extract_financial_data(driver, url, contrato_nome=None):
                 except Exception as e:
                     print(f"[GOOGLE SHEETS] Erro ao verificar cores: {e}", file=sys.stderr)
             
+            # Verificar se realmente extraiu dados úteis
+            meses_encontrados = len(valores.get("meses", {}))
+            tem_valores_uteis = any([
+                valores.get("vivaRioEmAberto") and valores.get("vivaRioEmAberto") not in ["Não encontrado", None],
+                valores.get("setembro"),
+                valores.get("outubro"),
+                valores.get("novembro"),
+                valores.get("total"),
+                meses_encontrados > 0
+            ])
+            
             result["valores"] = valores
-            result["success"] = True
-            result["message"] = "Dados extraídos com sucesso"
+            
+            if tem_valores_uteis:
+                result["success"] = True
+                result["message"] = f"Dados extraídos com sucesso ({meses_encontrados} meses encontrados)"
+                print(f"[GOOGLE SHEETS] ✅ {contrato_nome or 'Contrato'}: {meses_encontrados} meses, valor aberto: {valores.get('vivaRioEmAberto', 'N/A')}", file=sys.stderr)
+            else:
+                result["success"] = False
+                result["error"] = "CSV obtido mas nenhum dado relevante encontrado"
+                result["message"] = f"Planilha processada mas sem dados financeiros ({meses_encontrados} meses encontrados)"
+                print(f"[GOOGLE SHEETS] ⚠️ {contrato_nome or 'Contrato'}: CSV obtido mas sem dados relevantes. CSV preview (primeiros 300 chars):\n{csv_content[:300]}", file=sys.stderr)
+            
             result["csv_content"] = csv_content[:1000]  # Primeiros 1000 caracteres para debug
         else:
             result["error"] = "Não foi possível obter o conteúdo CSV"
-            result["message"] = "Falha ao extrair dados da planilha"
+            result["message"] = "Falha ao extrair dados da planilha - CSV vazio ou não obtido"
+            print(f"[GOOGLE SHEETS] ❌ {contrato_nome or 'Contrato'}: Erro ao obter CSV. Verifique se a aba '{nome_aba_busca if 'nome_aba_busca' in locals() else contrato_nome}' existe na planilha.", file=sys.stderr)
         
     except Exception as e:
         result["error"] = str(e)
@@ -636,6 +662,12 @@ def process_csv(csv_content):
             return valores
         
         print(f"[GOOGLE SHEETS] CSV parseado: {len(rows)} linhas encontradas", file=sys.stderr)
+        if len(rows) > 0:
+            print(f"[GOOGLE SHEETS] Primeira linha: {rows[0][:5] if len(rows[0]) > 5 else rows[0]}", file=sys.stderr)
+            if len(rows) > 10:
+                print(f"[GOOGLE SHEETS] Linha 10: {rows[9][:5] if len(rows[9]) > 5 else rows[9]}", file=sys.stderr)
+            if len(rows) > 30:
+                print(f"[GOOGLE SHEETS] Linha 33 (possível VIVA RIO): {rows[32][:5] if len(rows[32]) > 5 else rows[32]}", file=sys.stderr)
         
         # NOVA FUNCIONALIDADE: Identificar meses na coluna A e coletar dados relacionados
         # Log removido para melhorar performance
