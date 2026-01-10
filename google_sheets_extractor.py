@@ -575,15 +575,18 @@ def extract_financial_data(driver, url, contrato_nome=None):
                 except Exception as e:
                     print(f"[GOOGLE SHEETS] Erro ao verificar cores: {e}", file=sys.stderr)
             
-            # Verificar se realmente extraiu dados úteis
+            # Verificar se realmente extraiu dados úteis - considerar meses encontrados como sucesso
             meses_encontrados = len(valores.get("meses", {}))
-            tem_valores_uteis = any([
-                valores.get("vivaRioEmAberto") and valores.get("vivaRioEmAberto") not in ["Não encontrado", None],
+            nomes_meses = list(valores.get("meses", {}).keys())
+            valor_aberto = valores.get("vivaRioEmAberto")
+            
+            # Se há meses encontrados, considerar como sucesso (meses são o dado principal)
+            tem_valores_uteis = meses_encontrados > 0 or any([
+                valor_aberto and valor_aberto not in ["Não encontrado", None, "", "Encontrado"],
                 valores.get("setembro"),
                 valores.get("outubro"),
                 valores.get("novembro"),
-                valores.get("total"),
-                meses_encontrados > 0
+                valores.get("total")
             ])
             
             result["valores"] = valores
@@ -591,12 +594,20 @@ def extract_financial_data(driver, url, contrato_nome=None):
             if tem_valores_uteis:
                 result["success"] = True
                 result["message"] = f"Dados extraídos com sucesso ({meses_encontrados} meses encontrados)"
-                print(f"[GOOGLE SHEETS] ✅ {contrato_nome or 'Contrato'}: {meses_encontrados} meses, valor aberto: {valores.get('vivaRioEmAberto', 'N/A')}", file=sys.stderr)
+                print(f"[GOOGLE SHEETS] ✅ {contrato_nome or 'Contrato'}: {meses_encontrados} meses ({', '.join(nomes_meses) if nomes_meses else 'nenhum'}), valor aberto: {valor_aberto or 'N/A'}", file=sys.stderr)
             else:
                 result["success"] = False
                 result["error"] = "CSV obtido mas nenhum dado relevante encontrado"
-                result["message"] = f"Planilha processada mas sem dados financeiros ({meses_encontrados} meses encontrados)"
-                print(f"[GOOGLE SHEETS] ⚠️ {contrato_nome or 'Contrato'}: CSV obtido mas sem dados relevantes. CSV preview (primeiros 300 chars):\n{csv_content[:300]}", file=sys.stderr)
+                result["message"] = f"Planilha processada mas sem dados financeiros"
+                print(f"[GOOGLE SHEETS] ⚠️ {contrato_nome or 'Contrato'}: CSV obtido mas sem dados relevantes ({meses_encontrados} meses)", file=sys.stderr)
+                print(f"[GOOGLE SHEETS]   CSV preview (primeiros 500 chars):\n{csv_content[:500]}", file=sys.stderr)
+                # Log adicional: mostrar quais meses foram procurados
+                try:
+                    csv_reader_temp = csv.reader(io.StringIO(csv_content[:2000]), delimiter=',')
+                    rows_temp = list(csv_reader_temp)
+                    print(f"[GOOGLE SHEETS]   Primeiras 20 linhas do CSV (primeira coluna): {[row[0] if row and len(row) > 0 else '' for row in rows_temp[:20]]}", file=sys.stderr)
+                except:
+                    pass
             
             result["csv_content"] = csv_content[:1000]  # Primeiros 1000 caracteres para debug
         else:
@@ -1064,13 +1075,25 @@ def extract_all_contratos(driver, url):
             # Garantir que o resultado tenha o nome do contrato correto
             resultado["contrato"] = contrato_nome
             resultados[contrato_nome] = resultado
+            # Sempre verificar se há meses encontrados, mesmo se success=False
+            meses_encontrados = len(resultado.get("valores", {}).get("meses", {}))
+            valor_aberto = resultado.get("valores", {}).get("vivaRioEmAberto", "Não encontrado")
+            nomes_meses = list(resultado.get("valores", {}).get("meses", {}).keys())
+            
+            # Se há meses encontrados, considerar como sucesso mesmo que outros dados não tenham sido encontrados
+            if meses_encontrados > 0 and not resultado.get("success"):
+                print(f"[GOOGLE SHEETS] ⚠️ Contrato {contrato_nome} tem {meses_encontrados} meses mas success=False. Corrigindo...", file=sys.stderr)
+                resultado["success"] = True
+                resultado["message"] = f"Dados extraídos com sucesso ({meses_encontrados} meses encontrados)"
+                if resultado.get("error"):
+                    resultado["error"] = None
+            
             if resultado.get("success"):
-                meses_encontrados = len(resultado.get("valores", {}).get("meses", {}))
-                valor_aberto = resultado.get("valores", {}).get("vivaRioEmAberto", "Não encontrado")
-                print(f"[GOOGLE SHEETS] ✅ Dados do contrato {contrato_nome} extraídos: {meses_encontrados} meses, valor em aberto: {valor_aberto}", file=sys.stderr)
+                print(f"[GOOGLE SHEETS] ✅ Dados do contrato {contrato_nome} extraídos: {meses_encontrados} meses ({', '.join(nomes_meses) if nomes_meses else 'nenhum'}), valor em aberto: {valor_aberto}", file=sys.stderr)
             else:
-                meses_encontrados = len(resultado.get("valores", {}).get("meses", {}))
                 print(f"[GOOGLE SHEETS] ⚠️ Contrato {contrato_nome} não retornou sucesso: {resultado.get('error', 'Erro desconhecido')} (meses encontrados: {meses_encontrados})", file=sys.stderr)
+                if meses_encontrados > 0:
+                    print(f"[GOOGLE SHEETS]   Meses encontrados mesmo com erro: {', '.join(nomes_meses)}", file=sys.stderr)
         except Exception as e:
             print(f"[GOOGLE SHEETS] ❌ Erro ao extrair dados do contrato {contrato_nome}: {e}", file=sys.stderr)
             import traceback
