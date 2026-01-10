@@ -116,6 +116,14 @@ async function fetchFinanceiroVivaSaude() {
             
             // Verificar se temos dados de múltiplos contratos (nova estrutura)
             if (data.contratos) {
+                console.log('[FRONTEND] Dados de contratos recebidos:', Object.keys(data.contratos));
+                // Log detalhado de cada contrato
+                for (const [contrato, dadosContrato] of Object.entries(data.contratos)) {
+                    const meses = dadosContrato.valores?.meses ? Object.keys(dadosContrato.valores.meses) : [];
+                    const valorAberto = dadosContrato.valores?.vivaRioEmAberto || 'N/A';
+                    console.log(`[FRONTEND] Contrato ${contrato}: success=${dadosContrato.success}, meses=${meses.length} (${meses.join(', ')}), valor aberto=${valorAberto}`);
+                }
+                
                 // Armazenar dados de todos os contratos globalmente
                 window.vivaSaudeContratosData = data.contratos;
                 
@@ -146,7 +154,18 @@ async function fetchFinanceiroVivaSaude() {
                 const valoresContainer = document.getElementById('viva-saude-financeiro-valores');
                 if (valoresContainer && data.contratos.UPAS && data.contratos.UPAS.success) {
                     const valorAberto = data.contratos.UPAS.valores?.vivaRioEmAberto;
-                    if (valorAberto && valorAberto !== "Encontrado" && valorAberto !== "Não encontrado") {
+                    console.log('[FRONTEND] Valor em aberto UPAS:', valorAberto);
+                    
+                    // Validar se é um valor válido (não apenas "Encontrado" ou "Não encontrado")
+                    const valorValido = valorAberto && 
+                                       valorAberto !== "Encontrado" && 
+                                       valorAberto !== "Não encontrado" &&
+                                       valorAberto !== "Encontrado (valor não capturado)" &&
+                                       valorAberto !== "" &&
+                                       valorAberto !== null &&
+                                       valorAberto !== undefined;
+                    
+                    if (valorValido) {
                         const formatarValor = (valor) => {
                             if (!valor || typeof valor === 'string' && (valor.trim() === '' || valor.trim() === 'R$')) {
                                 return 'R$ 0,00';
