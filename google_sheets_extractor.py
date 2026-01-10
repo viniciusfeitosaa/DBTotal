@@ -765,14 +765,23 @@ def process_csv(csv_content):
         # A36: NOVEMBRO | B36: valor
         # A37: Total | B37: valor total
         
-        # Procurar linha 33 (índice 32) - VIVA RIO EM ABERTO
+        # Procurar linha 33 (índice 32) - VIVA RIO EM ABERTO ou valores em aberto
+        # Buscar por diferentes padrões de "valor em aberto" para diferentes contratos
         if len(rows) > 32:
             linha_33 = rows[32]  # A33 (índice 32)
             if linha_33 and len(linha_33) > 0:
                 cell_a33 = str(linha_33[0]).strip().upper() if len(linha_33) > 0 else ""
+                # Procurar por diferentes padrões
                 if "VIVA RIO" in cell_a33 or "VIVA RIO EM ABERTO" in cell_a33:
-                    valores["vivaRioEmAberto"] = "Encontrado"
-                    print(f"[GOOGLE SHEETS] ✅ Linha 33 (A33) encontrada: '{linha_33[0]}'", file=sys.stderr)
+                    # Se encontrar, capturar o valor na coluna B (índice 1)
+                    valor_em_aberto = str(linha_33[1]).strip() if len(linha_33) > 1 else "Encontrado"
+                    valores["vivaRioEmAberto"] = valor_em_aberto if valor_em_aberto else "Encontrado"
+                    print(f"[GOOGLE SHEETS] ✅ Linha 33 (A33) encontrada: '{linha_33[0]}', valor em aberto: '{valor_em_aberto}'", file=sys.stderr)
+                elif "EM ABERTO" in cell_a33 or "ABERTO" in cell_a33:
+                    # Para outros contratos que podem ter apenas "EM ABERTO"
+                    valor_em_aberto = str(linha_33[1]).strip() if len(linha_33) > 1 else "Encontrado"
+                    valores["vivaRioEmAberto"] = valor_em_aberto if valor_em_aberto else "Encontrado"
+                    print(f"[GOOGLE SHEETS] ✅ Valor em aberto encontrado na linha 33: '{valor_em_aberto}'", file=sys.stderr)
         
         # Função auxiliar para verificar se valor é negativo
         def is_negative_value(valor_str):
@@ -848,25 +857,32 @@ def process_csv(csv_content):
             linha_viva_rio = None
             indice_viva_rio = -1
             
+            # Buscar por diferentes padrões de "valor em aberto" para todos os contratos
+            padroes_em_aberto = [
+                "VIVA RIO EM ABERTO",
+                "VIVA RIO",
+                "EM ABERTO",
+                "VALOR EM ABERTO",
+                "TOTAL EM ABERTO"
+            ]
+            
             for i, row in enumerate(rows):
                 row_text = " ".join([str(cell) for cell in row]).upper()
-                if "VIVA RIO EM ABERTO" in row_text or ("VIVA" in row_text and "RIO" in row_text and "ABERTO" in row_text):
-                    linha_viva_rio = row
-                    indice_viva_rio = i
-                    valores["vivaRioEmAberto"] = "Encontrado"
-                    print(f"[GOOGLE SHEETS] ✅ Linha 'VIVA RIO EM ABERTO' encontrada na linha {i + 1}: {row}", file=sys.stderr)
-                    break
-            
-            if not linha_viva_rio:
-                # Tentar procurar apenas "VIVA RIO"
-                for i, row in enumerate(rows):
-                    row_text = " ".join([str(cell) for cell in row]).upper()
-                    if "VIVA RIO" in row_text:
+                # Verificar cada padrão
+                for padrao in padroes_em_aberto:
+                    if padrao in row_text:
                         linha_viva_rio = row
                         indice_viva_rio = i
-                        valores["vivaRioEmAberto"] = "Encontrado"
-                        print(f"[GOOGLE SHEETS] ✅ Linha 'VIVA RIO' encontrada na linha {i + 1}: {row}", file=sys.stderr)
+                        # Capturar o valor na coluna B (índice 1) se existir
+                        valor_em_aberto = str(row[1]).strip() if len(row) > 1 and str(row[1]).strip() else None
+                        if not valor_em_aberto or valor_em_aberto == "":
+                            # Tentar coluna C (índice 2) também
+                            valor_em_aberto = str(row[2]).strip() if len(row) > 2 and str(row[2]).strip() else "Encontrado"
+                        valores["vivaRioEmAberto"] = valor_em_aberto if valor_em_aberto else "Encontrado"
+                        print(f"[GOOGLE SHEETS] ✅ Linha '{padrao}' encontrada na linha {i + 1}, valor: '{valor_em_aberto}'", file=sys.stderr)
                         break
+                if linha_viva_rio:
+                    break
         
         if linha_viva_rio:
             # Procurar cabeçalho com meses (pode estar antes ou depois da linha VIVA RIO)
@@ -957,7 +973,37 @@ def process_csv(csv_content):
                                     valores["total"] = cell_clean
                                     print(f"[GOOGLE SHEETS] Total encontrado na linha {i + 1}, coluna {j}: {cell_clean}", file=sys.stderr)
         else:
-            print("[GOOGLE SHEETS] ⚠️ Linha 'VIVA RIO EM ABERTO' não encontrada no CSV", file=sys.stderr)
+            # Se não encontrou linha específica, ainda tentar buscar meses diretamente
+            print("[GOOGLE SHEETS] ⚠️ Linha de valor em aberto não encontrada, mas continuando busca de meses...", file=sys.stderr)
+            
+            # Buscar meses diretamente sem depender de "VIVA RIO"
+            for i, row in enumerate(rows):
+                row_text = " ".join([str(cell) for cell in row]).upper()
+                # Verificar se é uma linha de cabeçalho com meses
+                if any(month in row_text for month in ["SETEMBRO", "OUTUBRO", "NOVEMBRO", "TOTAL"]):
+                    # Tentar extrair valores desta linha
+                    if "SETEMBRO" in row_text:
+                        for j, cell in enumerate(row):
+                            if j > 0 and str(cell).strip():  # Coluna B em diante
+                                valores["setembro"] = str(cell).strip()
+                                break
+                    if "OUTUBRO" in row_text:
+                        for j, cell in enumerate(row):
+                            if j > 0 and str(cell).strip():
+                                valores["outubro"] = str(cell).strip()
+                                break
+                    if "NOVEMBRO" in row_text:
+                        for j, cell in enumerate(row):
+                            if j > 0 and str(cell).strip():
+                                valores["novembro"] = str(cell).strip()
+                                break
+                    if "TOTAL" in row_text:
+                        for j, cell in enumerate(row):
+                            if j > 0 and str(cell).strip():
+                                valores["total"] = str(cell).strip()
+                                break
+                    print(f"[GOOGLE SHEETS] ✅ Valores encontrados diretamente na linha {i + 1}", file=sys.stderr)
+                    break
             
     except Exception as e:
         print(f"[GOOGLE SHEETS] Erro ao processar CSV: {e}", file=sys.stderr)
