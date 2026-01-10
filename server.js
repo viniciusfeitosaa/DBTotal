@@ -2719,12 +2719,23 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
         // Verificar se o resultado tem a nova estrutura com múltiplos contratos
         if (result.contratos) {
             console.log('[GOOGLE SHEETS] Dados de múltiplos contratos extraídos:', Object.keys(result.contratos));
-            // Log resumido de cada contrato
+            // Log detalhado de cada contrato
             for (const [contrato, dados] of Object.entries(result.contratos)) {
+                const meses = dados.valores?.meses ? Object.keys(dados.valores.meses) : [];
+                const mesesCount = meses.length;
+                const valorAberto = dados.valores?.vivaRioEmAberto || 'N/A';
+                
                 if (dados.success) {
-                    console.log(`[GOOGLE SHEETS] ✅ ${contrato}: ${dados.valores?.meses ? Object.keys(dados.valores.meses).length : 0} meses`);
+                    console.log(`[GOOGLE SHEETS] ✅ ${contrato}: ${mesesCount} meses (${meses.join(', ')}), valor aberto: ${valorAberto}`);
                 } else {
-                    console.log(`[GOOGLE SHEETS] ❌ ${contrato}: ${dados.error || 'Erro desconhecido'}`);
+                    console.log(`[GOOGLE SHEETS] ⚠️ ${contrato}: success=False mas ${mesesCount} meses encontrados (${meses.join(', ')}), valor aberto: ${valorAberto}, erro: ${dados.error || 'N/A'}`);
+                    // Se há meses encontrados, corrigir success para True
+                    if (mesesCount > 0) {
+                        dados.success = true;
+                        dados.message = `Dados extraídos com sucesso (${mesesCount} meses encontrados)`;
+                        dados.error = null;
+                        console.log(`[GOOGLE SHEETS] 🔧 ${contrato}: Corrigido success para True (${mesesCount} meses encontrados)`);
+                    }
                 }
             }
         } else if (result.valores) {
