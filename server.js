@@ -2645,33 +2645,15 @@ async function fetchGoogleSheetsFinanceiro() {
 
 // Rota para buscar dados financeiros do Google Sheets (usando Python)
 app.get('/api/financeiro/viva-saude', async (req, res) => {
-    // Verificar cache primeiro
-    if (cache.financeiro.data && isCacheValid(cache.financeiro.timestamp, cache.config.TTL_FINANCEIRO)) {
-        console.log(`[CACHE] ✅ Retornando dados financeiros do cache (${Math.round((Date.now() - cache.financeiro.timestamp) / 1000)}s atrás)`);
-        return res.json({
-            ...cache.financeiro.data,
-            cached: true
-        });
-    }
+    // ⚠️ DESABILITAR CACHE TEMPORARIAMENTE PARA DEBUG
+    // Sempre executar o script Python para ver o que está acontecendo
     
-    // Se não há cache válido, atualizar em background e retornar cache antigo se houver
-    if (cache.financeiro.data) {
-        console.log(`[CACHE] ⚡ Cache expirado, retornando dados antigos enquanto atualiza...`);
-        // Atualizar em background
-        updateFinanceiroCache().catch(err => {
-            console.error('[CACHE] Erro ao atualizar em background:', err.message);
-        });
-        return res.json({
-            ...cache.financeiro.data,
-            cached: true,
-            updating: true
-        });
-    }
-    
-    // Se não há cache, fazer requisição síncrona (primeira vez)
     let pythonProcess = null;
     try {
+        console.log('\n' + '='.repeat(80));
+        console.log('[GOOGLE SHEETS] ════════════════════════════════════════════════════════');
         console.log('[GOOGLE SHEETS] Iniciando extração via Python...');
+        console.log('[GOOGLE SHEETS] ════════════════════════════════════════════════════════\n');
         
         // Executar script Python
         const scriptPath = path.join(__dirname, 'google_sheets_extractor.py');
