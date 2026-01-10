@@ -133,9 +133,24 @@ async function fetchFinanceiroVivaSaude() {
                     totalEl.textContent = totalGeral > 0 ? `R$ ${totalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-';
                 }
                 
-                // Renderizar dados do contrato UPAS por padrão (se disponível)
-                if (data.contratos.UPAS && data.contratos.UPAS.success) {
+                // Atualizar status
+                if (statusEl) {
+                    statusEl.textContent = 'Dados atualizados';
+                    statusEl.style.color = '#10b981';
+                }
+                if (updateEl) {
+                    updateEl.textContent = new Date().toLocaleString('pt-BR');
+                }
+                
+                // Renderizar dados do contrato UPAS por padrão (se disponível) na seção antiga
+                const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
+                if (data.contratos.UPAS && data.contratos.UPAS.success && detalhesMesesContainer) {
                     renderizarDadosContrato('UPAS', data.contratos.UPAS.valores);
+                    // Copiar conteúdo para a seção antiga também (compatibilidade)
+                    const financeiroUPASContent = document.getElementById('financeiro-UPAS-content');
+                    if (financeiroUPASContent) {
+                        financeiroUPASContent.innerHTML = detalhesMesesContainer.innerHTML;
+                    }
                 }
             }
             // Compatibilidade com estrutura antiga (apenas UPAS)
@@ -758,38 +773,185 @@ function initializeContratosVivaSaude() {
     console.log('[CONTRATOS] Event listeners configurados');
 }
 
-// Carregar financeiro de um contrato específico
-function loadFinanceiroContrato(contrato) {
-    if (contrato !== 'UPAS') {
-        // Por enquanto só temos dados do UPAS
+// Função auxiliar para renderizar dados de um contrato específico
+function renderizarDadosContrato(contrato, valores) {
+    if (!valores || !valores.meses) {
+        console.warn(`[CONTRATOS] Não há dados de meses para o contrato ${contrato}`);
         return;
     }
     
     const contentContainer = document.getElementById(`financeiro-${contrato}-content`);
-    if (!contentContainer) return;
-    
-    // Se já temos dados carregados, usar eles
-    const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
-    const valoresContainer = document.getElementById('viva-saude-financeiro-valores');
-    
-    let html = '';
-    
-    // Adicionar resumo dos meses em aberto (se disponível)
-    if (valoresContainer && valoresContainer.innerHTML) {
-        html += valoresContainer.innerHTML;
+    if (!contentContainer) {
+        console.warn(`[CONTRATOS] Container não encontrado para ${contrato}`);
+        return;
     }
     
-    // Adicionar detalhes dos meses (se disponível)
-    if (detalhesMesesContainer && detalhesMesesContainer.innerHTML) {
-        html += detalhesMesesContainer.innerHTML;
+    const ordemMeses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 
+                       'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+    const mesesOrdenados = Object.keys(valores.meses).sort((a, b) => {
+        return ordemMeses.indexOf(a) - ordemMeses.indexOf(b);
+    });
+    
+    let htmlDetalhes = '<div style="margin-bottom: 30px;">';
+    htmlDetalhes += `<h3 style="font-size: 18px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 20px; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 10px;">Detalhes por Mês - ${contrato}</h3>`;
+    
+    mesesOrdenados.forEach(mesNome => {
+        const mesData = valores.meses[mesNome];
+        
+        // Filtrar valores válidos (mesmo código usado anteriormente)
+        const valoresValidos = (mesData.valores_recebidos || []).filter(item => {
+            const valor = item.valor ? item.valor.trim().toUpperCase() : '';
+            return valor && valor !== '' && valor !== 'VALOR RECEDIDO' && valor !== 'VALOR RECEBIDO';
+        });
+        
+        const datasValidas = (mesData.datas || []).filter(item => {
+            const data = item.data ? item.data.trim().toUpperCase() : '';
+            return data && data !== '' && data !== 'DATA';
+        });
+        
+        const situacoesValidas = (mesData.situacoes || []).filter(item => {
+            if (!item.situacao) return false;
+            const situacao = item.situacao.trim();
+            if (!situacao || situacao === '') return false;
+            const situacaoUpper = situacao.toUpperCase();
+            const situacaoNormalizada = situacaoUpper.replace(/[^A-Z0-9]/g, '');
+            if (situacaoNormalizada === 'SITUAO' || situacaoNormalizada === 'SITUACAO') {
+                return false;
+            }
+            return true;
+        });
+        
+        const upasValidas = (mesData.upas || []).filter(upa => {
+            return upa && upa.trim() !== '';
+        });
+        
+        const valoresNFValidos = (mesData.valores_nf || []).filter(item => {
+            const valor = item.valor ? item.valor.trim() : '';
+            if (!valor || valor === '') return false;
+            const valorUpper = valor.toUpperCase().trim();
+            const valoresInvalidos = ['VALOR NF', 'VALOR NF.', 'VALORNF', 'VALORNF.'];
+            return !valoresInvalidos.includes(valorUpper);
+        });
+        
+        const maxLinhas = Math.max(
+            valoresValidos.length,
+            valoresNFValidos.length,
+            datasValidas.length,
+            situacoesValidas.length,
+            upasValidas.length
+        );
+        
+        if (maxLinhas > 0) {
+            htmlDetalhes += `
+                <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
+                    <div style="font-size: 20px; font-weight: 700; color: #3b82f6; margin-bottom: 20px; text-transform: capitalize;">
+                        ${mesNome.charAt(0) + mesNome.slice(1).toLowerCase()}
+                    </div>
+                    
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>UPAs</th>
+                                    <th>VALOR NF</th>
+                                    <th>Valor Recebido</th>
+                                    <th>Data</th>
+                                    <th>Situação</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            for (let i = 0; i < maxLinhas; i++) {
+                const upa = upasValidas[i] || '';
+                const valorNF = valoresNFValidos[i] ? valoresNFValidos[i].valor : '';
+                const valor = valoresValidos[i] ? valoresValidos[i].valor : '';
+                const data = datasValidas[i] ? datasValidas[i].data : '';
+                let situacao = situacoesValidas[i] ? situacoesValidas[i].situacao.trim() : '';
+                
+                if (situacao) {
+                    const situacaoUpper = situacao.toUpperCase();
+                    const situacaoNormalizada = situacaoUpper.replace(/[^A-Z0-9]/g, '');
+                    if (situacaoNormalizada === 'SITUAO' || situacaoNormalizada === 'SITUACAO') {
+                        situacao = '';
+                    }
+                }
+                
+                let corSituacao = '#f59e0b';
+                if (situacao) {
+                    const situacaoUpper = situacao.toUpperCase();
+                    if (situacaoUpper.includes('PAGO') || situacaoUpper.includes('OK') || situacaoUpper.includes('CONCLUÍDO')) {
+                        corSituacao = '#10b981';
+                    } else if (situacaoUpper.includes('PENDENTE') || situacaoUpper.includes('AGUARDANDO')) {
+                        corSituacao = '#f59e0b';
+                    } else if (situacaoUpper.includes('CANCELADO') || situacaoUpper.includes('ERRO')) {
+                        corSituacao = '#ef4444';
+                    }
+                }
+                
+                htmlDetalhes += `
+                    <tr class="${i % 2 === 0 ? 'even-row' : 'odd-row'}">
+                        <td style="color: rgba(255,255,255,0.9);">
+                            ${upa ? escapeHtml(upa) : 'TOTAL'}
+                        </td>
+                        <td style="color: #f59e0b; font-weight: 600;">
+                            ${valorNF ? escapeHtml(valorNF) : '-'}
+                        </td>
+                        <td style="color: #10b981; font-weight: 600;">
+                            ${valor ? escapeHtml(valor) : '-'}
+                        </td>
+                        <td style="color: #a78bfa;">
+                            ${data ? escapeHtml(data) : '-'}
+                        </td>
+                        <td>
+                            ${situacao ? `
+                                <span class="situacao-badge" style="background: rgba(${corSituacao === '#10b981' ? '16, 185, 129' : corSituacao === '#ef4444' ? '239, 68, 68' : '245, 158, 11'}, 0.2); padding: 4px 10px; border-radius: 4px; font-size: 12px; color: ${corSituacao}; border: 1px solid rgba(${corSituacao === '#10b981' ? '16, 185, 129' : corSituacao === '#ef4444' ? '239, 68, 68' : '245, 158, 11'}, 0.3);">
+                                    ${escapeHtml(situacao)}
+                                </span>
+                            ` : '-'}
+                        </td>
+                    </tr>
+                `;
+            }
+            
+            htmlDetalhes += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+    });
+    
+    htmlDetalhes += '</div>';
+    contentContainer.innerHTML = htmlDetalhes;
+}
+
+// Carregar financeiro de um contrato específico
+function loadFinanceiroContrato(contrato) {
+    const contentContainer = document.getElementById(`financeiro-${contrato}-content`);
+    if (!contentContainer) {
+        console.warn(`[CONTRATOS] Container não encontrado para ${contrato}`);
+        return;
     }
     
-    if (html) {
-        contentContainer.innerHTML = html;
-    } else {
-        // Se não tem dados, buscar
-        fetchFinanceiroVivaSaude();
+    // Verificar se temos dados carregados globalmente
+    if (window.vivaSaudeContratosData && window.vivaSaudeContratosData[contrato]) {
+        const dadosContrato = window.vivaSaudeContratosData[contrato];
+        console.log(`[CONTRATOS] Carregando dados do contrato ${contrato}:`, dadosContrato);
+        
+        if (dadosContrato.success && dadosContrato.valores) {
+            renderizarDadosContrato(contrato, dadosContrato.valores);
+            return;
+        } else {
+            contentContainer.innerHTML = `<p style="color: rgba(255,255,255,0.5);">Erro ao carregar dados: ${dadosContrato.error || 'Dados não disponíveis'}</p>`;
+            return;
+        }
     }
+    
+    // Se não temos dados, mostrar mensagem e tentar buscar
+    contentContainer.innerHTML = '<p style="color: rgba(255,255,255,0.5);">Dados ainda não disponíveis. Buscando...</p>';
+    fetchFinanceiroVivaSaude();
 }
 
 // Menu Mobile
