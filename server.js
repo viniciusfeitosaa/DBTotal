@@ -765,13 +765,36 @@ async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITT
 
         console.log(`[${systemName}] Aguardando download do CSV...`);
         
-        // Registrar timestamp antes do download para pegar apenas arquivos novos
+        // CRÍTICO: Limpar TODOS os CSVs antigos antes do download para evitar conflitos entre sistemas
+        try {
+            const existingFiles = fs.readdirSync(downloadsDir);
+            const csvFilesToDelete = existingFiles.filter(file => file.endsWith('.csv'));
+            if (csvFilesToDelete.length > 0) {
+                console.log(`[${systemName}] 🧹 Limpando ${csvFilesToDelete.length} CSV(s) antigo(s) para evitar conflitos...`);
+                csvFilesToDelete.forEach(file => {
+                    const filePath = path.join(downloadsDir, file);
+                    try {
+                        fs.unlinkSync(filePath);
+                        console.log(`[${systemName}] ✅ CSV antigo removido: ${file}`);
+                    } catch (e) {
+                        console.log(`[${systemName}] ⚠️ Erro ao remover CSV antigo ${file}: ${e.message}`);
+                    }
+                });
+            }
+        } catch (e) {
+            console.log(`[${systemName}] ⚠️ Erro ao limpar CSVs antigos: ${e.message}`);
+        }
+        
+        // Registrar timestamp ANTES do download para pegar apenas arquivos novos
         const timestampAntesDownload = Date.now();
-        await delay(5000);
+        console.log(`[${systemName}] ⏱️ Timestamp antes do download: ${new Date(timestampAntesDownload).toISOString()}`);
+        
+        // Aguardar download completar (dar tempo suficiente)
+        await delay(8000);
 
         // Procurar arquivo CSV baixado (mais recente criado após o início do processo)
         const files = fs.readdirSync(downloadsDir);
-        console.log(`[${systemName}] Arquivos encontrados no diretório de downloads: ${files.length}`);
+        console.log(`[${systemName}] 📁 Arquivos encontrados no diretório de downloads: ${files.length}`);
         
         const csvFiles = files
             .filter(file => file.endsWith('.csv'))
@@ -786,28 +809,28 @@ async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITT
                 };
             })
             .filter(file => {
-                // Arquivos criados/modificados após o início do processo (com margem de 5s antes)
-                const isRecent = file.mtime >= timestampAntesDownload - 5000;
+                // Arquivos criados/modificados após o início do processo (com margem mínima de 2s antes)
+                const isRecent = file.mtime >= timestampAntesDownload - 2000;
                 if (!isRecent) {
-                    console.log(`[${systemName}] Arquivo ${file.name} ignorado (muito antigo: ${new Date(file.mtime).toLocaleString('pt-BR')})`);
+                    console.log(`[${systemName}] ⏭️ Arquivo ${file.name} ignorado (muito antigo: ${new Date(file.mtime).toISOString()})`);
                 }
                 return isRecent;
             })
             .sort((a, b) => b.mtime - a.mtime); // Ordenar por mais recente
         
-        console.log(`[${systemName}] Arquivos CSV recentes encontrados: ${csvFiles.length}`);
+        console.log(`[${systemName}] 📊 Arquivos CSV recentes encontrados: ${csvFiles.length}`);
         csvFiles.forEach((file, index) => {
-            console.log(`[${systemName}]   ${index + 1}. ${file.name} - ${new Date(file.mtime).toLocaleString('pt-BR')}`);
+            console.log(`[${systemName}]   ${index + 1}. ${file.name} - ${new Date(file.mtime).toISOString()}`);
         });
         
         if (csvFiles.length === 0) {
             throw new Error(`Arquivo CSV não foi baixado para ${systemName}. Verifique se o download foi concluído.`);
         }
 
-        // Pegar o arquivo mais recente
+        // Pegar APENAS o arquivo mais recente (que deve ser o que acabou de ser baixado)
         const csvFile = csvFiles[0];
         const csvPath = csvFile.path;
-        console.log(`[${systemName}] ✅ Usando arquivo CSV: ${csvFile.name} (modificado em ${new Date(csvFile.mtime).toLocaleString('pt-BR')})`);
+        console.log(`[${systemName}] ✅ Usando arquivo CSV: ${csvFile.name} (modificado em ${new Date(csvFile.mtime).toISOString()})`);
 
         // Ler e processar CSV
         const csvContent = fs.readFileSync(csvPath, 'utf-8');
@@ -869,16 +892,24 @@ async function loginRHIDAndExportCSV(username, password, systemName = 'COOP-VITT
             }
         }
 
-        console.log(`[${systemName}] CSV processado: ${data.length} registros, Ativos=${ativos}, Inativos=${inativos}`);
+        console.log(`[${systemName}] ✅ CSV processado: ${data.length} registros, Ativos=${ativos}, Inativos=${inativos}`);
+        console.log(`[${systemName}] 🔍 Validando dados: Primeiro registro - ${JSON.stringify(data[0] || {})}`);
+        
+        // Validação adicional: verificar se os dados fazem sentido para o sistema
+        // (Alguns registros devem existir para garantir que não pegamos CSV errado)
+        if (data.length === 0) {
+            console.error(`[${systemName}] ⚠️ AVISO: CSV processado está vazio! Pode ter pego arquivo errado.`);
+        }
 
         // Obter cookies antes de fechar o browser
         const cookies = await page.cookies();
 
-        // Limpar arquivo CSV
+        // Limpar arquivo CSV IMEDIATAMENTE após processar para evitar conflitos
         try {
             fs.unlinkSync(csvPath);
+            console.log(`[${systemName}] 🗑️ CSV deletado: ${csvFile.name}`);
         } catch (e) {
-            console.log(`[${systemName}] Erro ao deletar arquivo CSV: ${e.message}`);
+            console.log(`[${systemName}] ⚠️ Erro ao deletar arquivo CSV: ${e.message}`);
         }
 
         await browser.close();

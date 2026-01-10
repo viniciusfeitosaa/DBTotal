@@ -906,8 +906,8 @@ function renderizarDadosContrato(contrato, valores) {
         if (maxLinhas > 0) {
             htmlDetalhes += `
                 <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
-                    <div style="font-size: 20px; font-weight: 700; color: #3b82f6; margin-bottom: 20px; text-transform: capitalize;">
-                        ${mesNome.charAt(0) + mesNome.slice(1).toLowerCase()}
+                    <div style="font-size: 20px; font-weight: 700; color: #3b82f6; margin-bottom: 20px; ${usarPeriodos ? '' : 'text-transform: capitalize;'}">
+                        ${usarPeriodos ? escapeHtml(itemNome) : (itemNome.charAt(0) + itemNome.slice(1).toLowerCase())}
                     </div>
                     
                     <div class="table-container">
