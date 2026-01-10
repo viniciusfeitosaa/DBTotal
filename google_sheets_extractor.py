@@ -157,12 +157,13 @@ def extract_financial_data(driver, url, contrato_nome=None):
                     continue
             
             if not aba_encontrada:
-                print(f"[GOOGLE SHEETS] ⚠️ Aba '{nome_aba_busca}' não encontrada, tentando continuar...", file=sys.stderr)
+                print(f"[GOOGLE SHEETS] ⚠️ Aba '{nome_aba_busca}' não encontrada, tentando continuar com aba padrão...", file=sys.stderr)
         except Exception as e:
             print(f"[GOOGLE SHEETS] Erro ao procurar aba: {e}", file=sys.stderr)
         
-        # Aguardar aba carregar (reduzido de 5s para 2s)
-        time.sleep(2)  # Reduzido de 5s para 2s
+        # Aguardar aba carregar completamente após clicar
+        print(f"[GOOGLE SHEETS] Aguardando aba '{nome_aba_busca}' carregar...", file=sys.stderr)
+        time.sleep(3)  # Aumentado para garantir que a aba carregou
         
         # Método 0: Tentar obter CSV diretamente via URL de exportação (mais confiável)
         print("[GOOGLE SHEETS] Tentando obter CSV via URL de exportação...", file=sys.stderr)
@@ -172,30 +173,101 @@ def extract_financial_data(driver, url, contrato_nome=None):
             # Tentar diferentes GIDs e formatos
             spreadsheet_id = "10vaVp0DcgOfjWW3_vat7M8mRVvMiBdtU9kAlDmjEioc"
             
-            # Tentar obter o GID da aba atual via JavaScript
+            # Tentar obter o GID da aba atual via JavaScript (melhorado)
+            gid = None
             try:
+                # Aguardar um pouco mais para garantir que a aba foi carregada
+                time.sleep(1)
                 gid = driver.execute_script("""
-                    // Tentar encontrar o GID da aba ativa
-                    const tabs = document.querySelectorAll('[role="tab"], [data-sheet-id], .docs-sheet-tab');
-                    for (let tab of tabs) {
-                        if (tab.getAttribute('aria-selected') === 'true' || 
-                            tab.classList.contains('docs-sheet-active') ||
-                            tab.classList.contains('docs-sheet-tab-active')) {
-                            const sheetId = tab.getAttribute('data-sheet-id') || 
-                                          tab.getAttribute('data-sheetid') ||
-                                          tab.getAttribute('data-gid');
+                    // Aguardar um pouco para garantir que a aba foi carregada
+                    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+                    
+                    // Tentar encontrar o GID da aba ativa de várias formas
+                    async function getActiveSheetId() {
+                        // Método 1: Buscar na URL
+                        const urlMatch = window.location.href.match(/[#&]gid=([0-9]+)/);
+                        if (urlMatch) {
+                            return urlMatch[1];
+                        }
+                        
+                        // Método 2: Buscar nas abas visíveis
+                        await sleep(500);
+                        const tabs = Array.from(document.querySelectorAll('[role="tab"], [data-sheet-id], .docs-sheet-tab, .docs-sheet-tab-name'));
+                        for (let tab of tabs) {
+                            if (tab.getAttribute('aria-selected') === 'true' || 
+                                tab.classList.contains('docs-sheet-active') ||
+                                tab.classList.contains('docs-sheet-tab-active') ||
+                                tab.style.background !== '') {
+                                const sheetId = tab.getAttribute('data-sheet-id') || 
+                                              tab.getAttribute('data-sheetid') ||
+                                              tab.getAttribute('data-gid') ||
+                                              tab.getAttribute('id');
+                                if (sheetId && !isNaN(parseInt(sheetId))) {
+                                    return sheetId;
+                                }
+                            }
+                        }
+                        
+                        // Método 3: Buscar em elementos internos
+                        const activeTab = document.querySelector('.docs-sheet-tab-active, [aria-selected="true"]');
+                        if (activeTab) {
+                            const sheetId = activeTab.getAttribute('data-sheet-id') || 
+                                          activeTab.getAttribute('data-sheetid') ||
+                                          activeTab.getAttribute('data-gid');
                             if (sheetId) return sheetId;
                         }
+                        
+                        return '0';
                     }
-                    // Tentar encontrar na URL
-                    const urlMatch = window.location.href.match(/[#&]gid=([0-9]+)/);
-                    if (urlMatch) return urlMatch[1];
-                    return '0';
+                    return getActiveSheetId();
                 """)
                 print(f"[GOOGLE SHEETS] GID encontrado via JS: {gid}", file=sys.stderr)
-            except:
+            except Exception as js_error:
+                print(f"[GOOGLE SHEETS] Erro ao obter GID via JS: {js_error}, tentando método alternativo...", file=sys.stderr)
+                gid = None
+            
+            # Se não conseguiu o GID via JS, tentar buscar todas as abas e seus GIDs
+            if not gid or gid == '0':
+                try:
+                    all_tabs_info = driver.execute_script("""
+                        const tabs = Array.from(document.querySelectorAll('[role="tab"], .docs-sheet-tab'));
+                        const tabsInfo = [];
+                        tabs.forEach(tab => {
+                            const name = tab.textContent || tab.innerText || '';
+                            const gid = tab.getAttribute('data-sheet-id') || 
+                                       tab.getAttribute('data-sheetid') ||
+                                       tab.getAttribute('data-gid') ||
+                                       tab.getAttribute('id');
+                            const isActive = tab.getAttribute('aria-selected') === 'true' || 
+                                           tab.classList.contains('docs-sheet-active');
+                            if (name && gid) {
+                                tabsInfo.push({name: name.trim(), gid: gid, active: isActive});
+                            }
+                        });
+                        return tabsInfo;
+                    """)
+                    print(f"[GOOGLE SHEETS] Abas encontradas: {all_tabs_info}", file=sys.stderr)
+                    
+                    # Procurar a aba que corresponde ao nome buscado
+                    for tab_info in all_tabs_info:
+                        if nome_aba_busca.upper() in tab_info['name'].upper() or tab_info['name'].upper() in nome_aba_busca.upper():
+                            gid = tab_info['gid']
+                            print(f"[GOOGLE SHEETS] ✅ Aba '{nome_aba_busca}' encontrada com GID: {gid}", file=sys.stderr)
+                            break
+                    
+                    if not gid:
+                        # Se não encontrou, usar a aba ativa
+                        for tab_info in all_tabs_info:
+                            if tab_info.get('active'):
+                                gid = tab_info['gid']
+                                print(f"[GOOGLE SHEETS] Usando aba ativa com GID: {gid}", file=sys.stderr)
+                                break
+                except Exception as e:
+                    print(f"[GOOGLE SHEETS] Erro ao buscar abas: {e}", file=sys.stderr)
+            
+            if not gid:
                 gid = '0'
-                print("[GOOGLE SHEETS] Não foi possível obter GID via JS, usando '0'", file=sys.stderr)
+                print("[GOOGLE SHEETS] Não foi possível obter GID, usando '0' (primeira aba)", file=sys.stderr)
             
             # Tentar diferentes URLs de exportação e GIDs
             gids_to_try = [gid, '0', '1', '2', '3']
@@ -911,16 +983,26 @@ def extract_all_contratos(driver, url):
     for contrato_nome, aba_nome in contratos.items():
         print(f"[GOOGLE SHEETS] Extraindo dados do contrato: {contrato_nome} (aba: {aba_nome})", file=sys.stderr)
         try:
-            resultado = extract_financial_data(driver, url, contrato_nome)
+            # Passar o nome da aba, não o nome do contrato
+            resultado = extract_financial_data(driver, url, aba_nome)
+            # Garantir que o resultado tenha o nome do contrato correto
+            resultado["contrato"] = contrato_nome
             resultados[contrato_nome] = resultado
-            print(f"[GOOGLE SHEETS] ✅ Dados do contrato {contrato_nome} extraídos com sucesso", file=sys.stderr)
+            if resultado.get("success"):
+                print(f"[GOOGLE SHEETS] ✅ Dados do contrato {contrato_nome} extraídos com sucesso", file=sys.stderr)
+            else:
+                print(f"[GOOGLE SHEETS] ⚠️ Contrato {contrato_nome} não retornou sucesso: {resultado.get('error', 'Erro desconhecido')}", file=sys.stderr)
         except Exception as e:
             print(f"[GOOGLE SHEETS] ❌ Erro ao extrair dados do contrato {contrato_nome}: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
             resultados[contrato_nome] = {
                 "success": False,
                 "contrato": contrato_nome,
                 "error": str(e),
-                "valores": {}
+                "valores": {
+                    "meses": {}
+                }
             }
         time.sleep(2)  # Aguardar entre extrações
     
@@ -951,12 +1033,17 @@ def main():
             print("[GOOGLE SHEETS] Chrome não encontrado, tentando método alternativo (URL direta)...", file=sys.stderr)
             sys.stderr.flush()
             
+            # Por enquanto, sem Selenium só podemos tentar extrair a primeira aba (GID 0)
+            # Para múltiplas abas, precisamos do Selenium para navegar entre elas
+            print("[GOOGLE SHEETS] ⚠️ Método alternativo não suporta múltiplos contratos. Tentando apenas primeira aba...", file=sys.stderr)
+            
             try:
                 spreadsheet_id = "10vaVp0DcgOfjWW3_vat7M8mRVvMiBdtU9kAlDmjEioc"
-                # Tentar diferentes GIDs
-                for gid in ['0', '1', '2', '3']:
+                # Tentar diferentes GIDs (0 = primeira aba, que geralmente é a padrão)
+                for gid in ['0', '1', '2', '3', '4', '5']:
                     try:
                         export_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv&gid={gid}"
+                        print(f"[GOOGLE SHEETS] Tentando GID {gid}...", file=sys.stderr)
                         req = urllib.request.Request(export_url)
                         req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
                         response = urllib.request.urlopen(req, timeout=10)
@@ -964,27 +1051,40 @@ def main():
                         
                         if csv_data and len(csv_data) > 50 and ',' in csv_data and not csv_data.strip().startswith('<'):
                             valores = process_csv(csv_data)
+                            # Criar estrutura compatível com múltiplos contratos (apenas UPAS por enquanto)
                             result = {
                                 "success": True,
-                                "message": "Dados extraídos via URL direta (sem Selenium)",
-                                "valores": valores,
-                                "method": "url_direct"
+                                "message": "Dados extraídos via URL direta (sem Selenium) - apenas primeira aba",
+                                "contratos": {
+                                    "UPAS": {
+                                        "success": True,
+                                        "contrato": "UPAS",
+                                        "valores": valores,
+                                        "method": "url_direct"
+                                    }
+                                }
                             }
+                            print(f"[GOOGLE SHEETS] ✅ CSV obtido via GID {gid} ({len(csv_data)} caracteres)", file=sys.stderr)
                             break
-                    except:
+                    except Exception as e:
+                        print(f"[GOOGLE SHEETS] Erro ao tentar GID {gid}: {str(e)}", file=sys.stderr)
                         continue
                 
                 if not result:
                     result = {
                         "success": False,
                         "error": "Não foi possível configurar o driver do Chrome e método alternativo falhou",
-                        "message": "Erro ao inicializar Selenium e método alternativo"
+                        "message": "Erro ao inicializar Selenium e método alternativo. Instale o Chrome/ChromeDriver para suporte completo.",
+                        "contratos": {}
                     }
             except Exception as alt_error:
+                import traceback
+                traceback.print_exc(file=sys.stderr)
                 result = {
                     "success": False,
                     "error": f"Chrome não encontrado e método alternativo falhou: {str(alt_error)}",
-                    "message": "Erro ao inicializar Selenium"
+                    "message": "Erro ao inicializar Selenium",
+                    "contratos": {}
                 }
             
             # Garantir que JSON vai para stdout
@@ -997,7 +1097,7 @@ def main():
             else:
                 sys.exit(0)
         
-        print("[GOOGLE SHEETS] Driver configurado, extraindo dados de todos os contratos...", file=sys.stderr)
+        print("[GOOGLE SHEETS] ✅ Driver configurado com sucesso, extraindo dados de todos os contratos...", file=sys.stderr)
         sys.stderr.flush()
         
         # Extrair dados de todos os contratos
