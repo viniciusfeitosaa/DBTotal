@@ -142,14 +142,17 @@ async function fetchFinanceiroVivaSaude() {
                     updateEl.textContent = new Date().toLocaleString('pt-BR');
                 }
                 
-                // Renderizar dados do contrato UPAS por padrão (se disponível) na seção antiga
-                const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
-                if (data.contratos.UPAS && data.contratos.UPAS.success && detalhesMesesContainer) {
+                // Renderizar dados do contrato UPAS por padrão (se disponível)
+                if (data.contratos.UPAS && data.contratos.UPAS.success) {
                     renderizarDadosContrato('UPAS', data.contratos.UPAS.valores);
-                    // Copiar conteúdo para a seção antiga também (compatibilidade)
+                    
+                    // Também atualizar seção antiga para compatibilidade
+                    const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
                     const financeiroUPASContent = document.getElementById('financeiro-UPAS-content');
-                    if (financeiroUPASContent) {
-                        financeiroUPASContent.innerHTML = detalhesMesesContainer.innerHTML;
+                    if (financeiroUPASContent && financeiroUPASContent.innerHTML) {
+                        if (detalhesMesesContainer) {
+                            detalhesMesesContainer.innerHTML = financeiroUPASContent.innerHTML;
+                        }
                     }
                 }
             }
@@ -748,7 +751,7 @@ function initializeContratosVivaSaude() {
                     Financeiro - ${contrato}
                 </h4>
                 <div id="financeiro-${contrato}-content">
-                    ${contrato === 'UPAS' ? '<p style="color: rgba(255,255,255,0.7);">Carregando dados...</p>' : '<p style="color: rgba(255,255,255,0.5);">Dados ainda não disponíveis para este contrato.</p>'}
+                    <p style="color: rgba(255,255,255,0.7);">Carregando dados...</p>
                 </div>
             `;
             financeiroContratosContainer.appendChild(section);
