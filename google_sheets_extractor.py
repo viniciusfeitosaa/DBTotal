@@ -86,8 +86,15 @@ def setup_driver():
             print(f"Erro ao configurar driver (fallback): {e2}", file=sys.stderr)
             return None
 
-def extract_financial_data(driver, url, contrato_nome=None):
-    """Extrair dados financeiros do Google Sheets para um contrato específico"""
+def extract_financial_data(driver, url, contrato_nome=None, usar_periodos=False):
+    """Extrair dados financeiros do Google Sheets para um contrato específico
+    
+    Parâmetros:
+    - driver: Selenium WebDriver
+    - url: URL da planilha
+    - contrato_nome: Nome do contrato (ex: "UPAS", "ITAPIPOCA")
+    - usar_periodos: Se True, procura por períodos em vez de meses (usado para ITAPIPOCA)
+    """
     result = {
         "success": False,
         "message": "",
@@ -98,7 +105,8 @@ def extract_financial_data(driver, url, contrato_nome=None):
             "outubro": None,
             "novembro": None,
             "total": None,
-            "meses": {}  # Dados organizados por mês
+            "meses": {},  # Dados organizados por mês
+            "periodos": {} if usar_periodos else None  # Dados organizados por período (ITAPIPOCA)
         },
         "error": None
     }
@@ -507,9 +515,9 @@ def extract_financial_data(driver, url, contrato_nome=None):
         
         # Processar CSV se obtido
         if csv_content:
-            print(f"[GOOGLE SHEETS] CSV obtido com {len(csv_content)} caracteres, processando...", file=sys.stderr)
+            print(f"[GOOGLE SHEETS] CSV obtido com {len(csv_content)} caracteres, processando... (usar_periodos={usar_periodos})", file=sys.stderr)
             print(f"[GOOGLE SHEETS] Primeiras 500 caracteres do CSV: {csv_content[:500]}", file=sys.stderr)
-            valores = process_csv(csv_content)
+            valores = process_csv(csv_content, usar_periodos=usar_periodos)
             
             # Log dos valores extraídos
             meses_encontrados = len(valores.get("meses", {}))
@@ -575,13 +583,15 @@ def extract_financial_data(driver, url, contrato_nome=None):
                 except Exception as e:
                     print(f"[GOOGLE SHEETS] Erro ao verificar cores: {e}", file=sys.stderr)
             
-            # Verificar se realmente extraiu dados úteis - considerar meses encontrados como sucesso
+            # Verificar se realmente extraiu dados úteis - considerar meses/períodos encontrados como sucesso
             meses_encontrados = len(valores.get("meses", {}))
+            periodos_encontrados = len(valores.get("periodos", {})) if valores.get("periodos") else 0
             nomes_meses = list(valores.get("meses", {}).keys())
+            nomes_periodos = list(valores.get("periodos", {}).keys()) if valores.get("periodos") else []
             valor_aberto = valores.get("vivaRioEmAberto")
             
-            # Se há meses encontrados, considerar como sucesso (meses são o dado principal)
-            tem_valores_uteis = meses_encontrados > 0 or any([
+            # Se há meses ou períodos encontrados, considerar como sucesso
+            tem_valores_uteis = meses_encontrados > 0 or periodos_encontrados > 0 or any([
                 valor_aberto and valor_aberto not in ["Não encontrado", None, "", "Encontrado"],
                 valores.get("setembro"),
                 valores.get("outubro"),
@@ -593,8 +603,12 @@ def extract_financial_data(driver, url, contrato_nome=None):
             
             if tem_valores_uteis:
                 result["success"] = True
-                result["message"] = f"Dados extraídos com sucesso ({meses_encontrados} meses encontrados)"
-                print(f"[GOOGLE SHEETS] ✅ {contrato_nome or 'Contrato'}: {meses_encontrados} meses ({', '.join(nomes_meses) if nomes_meses else 'nenhum'}), valor aberto: {valor_aberto or 'N/A'}", file=sys.stderr)
+                if periodos_encontrados > 0:
+                    result["message"] = f"Dados extraídos com sucesso ({periodos_encontrados} períodos encontrados)"
+                    print(f"[GOOGLE SHEETS] ✅ {contrato_nome or 'Contrato'}: {periodos_encontrados} períodos ({', '.join(nomes_periodos[:3]) if nomes_periodos else 'nenhum'}...), valor aberto: {valor_aberto or 'N/A'}", file=sys.stderr)
+                else:
+                    result["message"] = f"Dados extraídos com sucesso ({meses_encontrados} meses encontrados)"
+                    print(f"[GOOGLE SHEETS] ✅ {contrato_nome or 'Contrato'}: {meses_encontrados} meses ({', '.join(nomes_meses) if nomes_meses else 'nenhum'}), valor aberto: {valor_aberto or 'N/A'}", file=sys.stderr)
             else:
                 result["success"] = False
                 result["error"] = "CSV obtido mas nenhum dado relevante encontrado"
@@ -622,7 +636,7 @@ def extract_financial_data(driver, url, contrato_nome=None):
     
     return result
 
-def process_csv(csv_content):
+def process_csv(csv_content, usar_periodos=False):
     """Processar CSV e extrair valores financeiros
     Estrutura esperada:
     - A33: VIVA RIO EM ABERTO
@@ -632,12 +646,15 @@ def process_csv(csv_content):
     - A37: Total | B37: valor total
     
     Nova funcionalidade:
-    - Identificar meses na coluna A (ex: "Junho" em A4)
-    - Quando encontrar um mês, coletar:
-      - Nome das UPAs em B3, B4, B5 (relativo à linha do mês)
-      - Valor recebido em D2 a D6 (relativo à linha do mês)
-      - Data em E2 a E6 (relativo à linha do mês)
-      - Situação em H2 até H5 (relativo à linha do mês)
+    - Identificar meses na coluna A (ex: "Junho" em A4) OU períodos (ex: "01/11/2025 - 14/11/2025")
+    - Quando encontrar um mês/período, coletar:
+      - Nome das UPAs em B3, B4, B5 (relativo à linha do mês/período)
+      - Valor recebido em D2 a D6 (relativo à linha do mês/período)
+      - Data em E2 a E6 (relativo à linha do mês/período)
+      - Situação em H2 até H5 (relativo à linha do mês/período)
+    
+    Parâmetros:
+    - usar_periodos: Se True, procura por períodos (formato data - data) em vez de meses. Usado para ITAPIPOCA.
     """
     valores = {
         "vivaRioEmAberto": None,
@@ -645,7 +662,8 @@ def process_csv(csv_content):
         "outubro": None,
         "novembro": None,
         "total": None,
-        "meses": {}  # Nova estrutura para dados por mês
+        "meses": {},  # Nova estrutura para dados por mês
+        "periodos": {} if usar_periodos else None  # Estrutura para períodos (ITAPIPOCA)
     }
     
     # Lista de meses em português
@@ -1070,30 +1088,45 @@ def extract_all_contratos(driver, url):
     for contrato_nome, aba_nome in contratos.items():
         print(f"[GOOGLE SHEETS] Extraindo dados do contrato: {contrato_nome} (aba: {aba_nome})", file=sys.stderr)
         try:
+            # ITAPIPOCA usa períodos em vez de meses
+            usar_periodos = (contrato_nome == "ITAPIPOCA")
+            if usar_periodos:
+                print(f"[GOOGLE SHEETS] ITAPIPOCA detectado: usando modo de períodos", file=sys.stderr)
+            
             # Passar o nome da aba, não o nome do contrato
-            resultado = extract_financial_data(driver, url, aba_nome)
+            resultado = extract_financial_data(driver, url, aba_nome, usar_periodos=usar_periodos)
             # Garantir que o resultado tenha o nome do contrato correto
             resultado["contrato"] = contrato_nome
             resultados[contrato_nome] = resultado
-            # Sempre verificar se há meses encontrados, mesmo se success=False
+            # Sempre verificar se há meses/períodos encontrados, mesmo se success=False
             meses_encontrados = len(resultado.get("valores", {}).get("meses", {}))
+            periodos_encontrados = len(resultado.get("valores", {}).get("periodos", {})) if resultado.get("valores", {}).get("periodos") else 0
             valor_aberto = resultado.get("valores", {}).get("vivaRioEmAberto", "Não encontrado")
             nomes_meses = list(resultado.get("valores", {}).get("meses", {}).keys())
+            nomes_periodos = list(resultado.get("valores", {}).get("periodos", {}).keys()) if resultado.get("valores", {}).get("periodos") else []
             
-            # Se há meses encontrados, considerar como sucesso mesmo que outros dados não tenham sido encontrados
-            if meses_encontrados > 0 and not resultado.get("success"):
-                print(f"[GOOGLE SHEETS] ⚠️ Contrato {contrato_nome} tem {meses_encontrados} meses mas success=False. Corrigindo...", file=sys.stderr)
+            # Se há meses ou períodos encontrados, considerar como sucesso mesmo que outros dados não tenham sido encontrados
+            if (meses_encontrados > 0 or periodos_encontrados > 0) and not resultado.get("success"):
+                print(f"[GOOGLE SHEETS] ⚠️ Contrato {contrato_nome} tem {meses_encontrados} meses e {periodos_encontrados} períodos mas success=False. Corrigindo...", file=sys.stderr)
                 resultado["success"] = True
-                resultado["message"] = f"Dados extraídos com sucesso ({meses_encontrados} meses encontrados)"
+                if periodos_encontrados > 0:
+                    resultado["message"] = f"Dados extraídos com sucesso ({periodos_encontrados} períodos encontrados)"
+                else:
+                    resultado["message"] = f"Dados extraídos com sucesso ({meses_encontrados} meses encontrados)"
                 if resultado.get("error"):
                     resultado["error"] = None
             
             if resultado.get("success"):
-                print(f"[GOOGLE SHEETS] ✅ Dados do contrato {contrato_nome} extraídos: {meses_encontrados} meses ({', '.join(nomes_meses) if nomes_meses else 'nenhum'}), valor em aberto: {valor_aberto}", file=sys.stderr)
+                if periodos_encontrados > 0:
+                    print(f"[GOOGLE SHEETS] ✅ Dados do contrato {contrato_nome} extraídos: {periodos_encontrados} períodos ({', '.join(nomes_periodos[:3]) if nomes_periodos else 'nenhum'}...), valor em aberto: {valor_aberto}", file=sys.stderr)
+                else:
+                    print(f"[GOOGLE SHEETS] ✅ Dados do contrato {contrato_nome} extraídos: {meses_encontrados} meses ({', '.join(nomes_meses) if nomes_meses else 'nenhum'}), valor em aberto: {valor_aberto}", file=sys.stderr)
             else:
-                print(f"[GOOGLE SHEETS] ⚠️ Contrato {contrato_nome} não retornou sucesso: {resultado.get('error', 'Erro desconhecido')} (meses encontrados: {meses_encontrados})", file=sys.stderr)
+                print(f"[GOOGLE SHEETS] ⚠️ Contrato {contrato_nome} não retornou sucesso: {resultado.get('error', 'Erro desconhecido')} (meses: {meses_encontrados}, períodos: {periodos_encontrados})", file=sys.stderr)
                 if meses_encontrados > 0:
                     print(f"[GOOGLE SHEETS]   Meses encontrados mesmo com erro: {', '.join(nomes_meses)}", file=sys.stderr)
+                if periodos_encontrados > 0:
+                    print(f"[GOOGLE SHEETS]   Períodos encontrados mesmo com erro: {', '.join(nomes_periodos[:3])}...", file=sys.stderr)
         except Exception as e:
             print(f"[GOOGLE SHEETS] ❌ Erro ao extrair dados do contrato {contrato_nome}: {e}", file=sys.stderr)
             import traceback
