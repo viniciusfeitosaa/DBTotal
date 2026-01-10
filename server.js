@@ -2717,61 +2717,127 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
         
         // Verificar se stdout está vazio
         if (!stdout || !stdout.trim()) {
-            console.error('[GOOGLE SHEETS] ⚠️ stdout vazio!');
-            console.error('[GOOGLE SHEETS] stderr (últimas 20 linhas):', stderr.split('\n').slice(-20).join('\n'));
+            console.error('[GOOGLE SHEETS] ❌ stdout vazio!');
+            console.error('[GOOGLE SHEETS] stderr completo:');
+            console.error(stderr);
             throw new Error('Script Python não retornou dados. Verifique os logs acima.');
         }
         
-        console.log(`[GOOGLE SHEETS] stdout recebido (${stdout.length} caracteres)`);
+        console.log(`[GOOGLE SHEETS] 📥 stdout recebido (${stdout.length} caracteres)`);
+        console.log(`[GOOGLE SHEETS] 📥 stdout (primeiros 500 chars): ${stdout.substring(0, 500)}`);
+        console.log(`[GOOGLE SHEETS] 📥 stdout (últimos 500 chars): ${stdout.substring(Math.max(0, stdout.length - 500))}`);
         
         // Parsear resultado JSON do stdout
         let result;
         try {
             // Limpar stdout (remover logs que possam estar misturados)
             const stdoutClean = stdout.trim();
+            
             // Tentar encontrar JSON no stdout (pode ter logs antes)
-            const jsonMatch = stdoutClean.match(/\{[\s\S]*\}/);
+            // Procurar por JSON completo (começa com { e termina com })
+            let jsonMatch = stdoutClean.match(/\{[\s\S]*\}/);
+            
+            // Se não encontrou, tentar encontrar no final (JSON geralmente está no final)
+            if (!jsonMatch) {
+                const lines = stdoutClean.split('\n');
+                const jsonLines = [];
+                let foundStart = false;
+                for (let i = lines.length - 1; i >= 0; i--) {
+                    if (lines[i].trim().includes('}')) foundStart = true;
+                    if (foundStart) {
+                        jsonLines.unshift(lines[i]);
+                        if (lines[i].trim().includes('{')) break;
+                    }
+                }
+                if (jsonLines.length > 0) {
+                    jsonMatch = [jsonLines.join('\n')];
+                }
+            }
+            
             const jsonString = jsonMatch ? jsonMatch[0] : stdoutClean;
             
+            console.log(`[GOOGLE SHEETS] 🔍 JSON extraído (${jsonString.length} caracteres)`);
+            console.log(`[GOOGLE SHEETS] 🔍 JSON (primeiros 500 chars): ${jsonString.substring(0, 500)}`);
+            
             if (!jsonString || jsonString.length < 10) {
+                console.error('[GOOGLE SHEETS] ❌ JSON muito pequeno ou vazio');
+                console.error('[GOOGLE SHEETS] stdout completo:', stdout);
                 throw new Error('JSON não encontrado no stdout');
             }
             
             result = JSON.parse(jsonString);
+            console.log('[GOOGLE SHEETS] ✅ JSON parseado com sucesso');
         } catch (parseError) {
-            console.error('[GOOGLE SHEETS] Erro ao parsear JSON:', parseError.message);
-            console.error('[GOOGLE SHEETS] stdout (primeiros 1000 chars):', stdout.substring(0, 1000));
-            console.error('[GOOGLE SHEETS] stdout (últimos 1000 chars):', stdout.substring(Math.max(0, stdout.length - 1000)));
+            console.error('[GOOGLE SHEETS] ❌ Erro ao parsear JSON:', parseError.message);
+            console.error('[GOOGLE SHEETS] ❌ Stack trace:', parseError.stack);
+            console.error('[GOOGLE SHEETS] stdout completo:');
+            console.error(stdout);
+            console.error('[GOOGLE SHEETS] stderr completo:');
+            console.error(stderr);
             throw new Error(`Resposta inválida do script Python: ${parseError.message}`);
         }
         
-        console.log('[GOOGLE SHEETS] Resultado:', result.success ? '✅ Sucesso' : '❌ Falha');
+        console.log('\n' + '='.repeat(80));
+        console.log('[GOOGLE SHEETS] 📊 ANÁLISE DO RESULTADO');
+        console.log('='.repeat(80));
+        console.log(`[GOOGLE SHEETS] success: ${result.success}`);
+        console.log(`[GOOGLE SHEETS] message: ${result.message || 'N/A'}`);
+        console.log(`[GOOGLE SHEETS] error: ${result.error || 'N/A'}`);
+        console.log(`[GOOGLE SHEETS] Tem 'contratos'?: ${!!result.contratos}`);
+        console.log(`[GOOGLE SHEETS] Tem 'valores'?: ${!!result.valores}`);
         
         // Verificar se o resultado tem a nova estrutura com múltiplos contratos
         if (result.contratos) {
-            console.log('[GOOGLE SHEETS] Dados de múltiplos contratos extraídos:', Object.keys(result.contratos));
+            console.log('\n[GOOGLE SHEETS] 📋 Contratos encontrados:', Object.keys(result.contratos));
+            console.log(`[GOOGLE SHEETS] Total de contratos: ${Object.keys(result.contratos).length}\n`);
+            
             // Log detalhado de cada contrato
             for (const [contrato, dados] of Object.entries(result.contratos)) {
+                console.log(`[GOOGLE SHEETS] ─────────────────────────────────────────────────────────`);
+                console.log(`[GOOGLE SHEETS] 📄 CONTRATO: ${contrato}`);
+                console.log(`[GOOGLE SHEETS]   success: ${dados.success}`);
+                console.log(`[GOOGLE SHEETS]   message: ${dados.message || 'N/A'}`);
+                console.log(`[GOOGLE SHEETS]   error: ${dados.error || 'N/A'}`);
+                
                 const meses = dados.valores?.meses ? Object.keys(dados.valores.meses) : [];
+                const periodos = dados.valores?.periodos ? Object.keys(dados.valores.periodos) : [];
                 const mesesCount = meses.length;
+                const periodosCount = periodos.length;
                 const valorAberto = dados.valores?.vivaRioEmAberto || 'N/A';
                 
+                console.log(`[GOOGLE SHEETS]   Meses encontrados: ${mesesCount} (${meses.join(', ') || 'nenhum'})`);
+                console.log(`[GOOGLE SHEETS]   Períodos encontrados: ${periodosCount} (${periodos.slice(0, 3).join(', ') || 'nenhum'}${periodos.length > 3 ? '...' : ''})`);
+                console.log(`[GOOGLE SHEETS]   Valor em aberto: ${valorAberto}`);
+                
                 if (dados.success) {
-                    console.log(`[GOOGLE SHEETS] ✅ ${contrato}: ${mesesCount} meses (${meses.join(', ')}), valor aberto: ${valorAberto}`);
+                    console.log(`[GOOGLE SHEETS]   ✅ Status: SUCESSO`);
                 } else {
-                    console.log(`[GOOGLE SHEETS] ⚠️ ${contrato}: success=False mas ${mesesCount} meses encontrados (${meses.join(', ')}), valor aberto: ${valorAberto}, erro: ${dados.error || 'N/A'}`);
-                    // Se há meses encontrados, corrigir success para True
-                    if (mesesCount > 0) {
+                    console.log(`[GOOGLE SHEETS]   ⚠️ Status: FALHA`);
+                    // Se há meses ou períodos encontrados, corrigir success para True
+                    if (mesesCount > 0 || periodosCount > 0) {
                         dados.success = true;
-                        dados.message = `Dados extraídos com sucesso (${mesesCount} meses encontrados)`;
+                        if (periodosCount > 0) {
+                            dados.message = `Dados extraídos com sucesso (${periodosCount} períodos encontrados)`;
+                        } else {
+                            dados.message = `Dados extraídos com sucesso (${mesesCount} meses encontrados)`;
+                        }
                         dados.error = null;
-                        console.log(`[GOOGLE SHEETS] 🔧 ${contrato}: Corrigido success para True (${mesesCount} meses encontrados)`);
+                        console.log(`[GOOGLE SHEETS]   🔧 Corrigido success para True (${mesesCount} meses, ${periodosCount} períodos)`);
+                    } else {
+                        console.log(`[GOOGLE SHEETS]   ❌ Nenhum dado encontrado!`);
                     }
                 }
             }
+            console.log(`[GOOGLE SHEETS] ─────────────────────────────────────────────────────────\n`);
         } else if (result.valores) {
-            console.log('[GOOGLE SHEETS] Valores extraídos (formato antigo):', JSON.stringify(result.valores, null, 2));
+            console.log('[GOOGLE SHEETS] ⚠️ Formato antigo detectado (sem múltiplos contratos)');
+            console.log('[GOOGLE SHEETS] Valores:', JSON.stringify(result.valores, null, 2));
+        } else {
+            console.log('[GOOGLE SHEETS] ❌ ERRO: Nenhum dado encontrado no resultado!');
+            console.log('[GOOGLE SHEETS] Resultado completo:', JSON.stringify(result, null, 2));
         }
+        
+        console.log('='.repeat(80) + '\n');
         
         // Salvar no cache
         cache.financeiro.data = result;
@@ -2800,8 +2866,19 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
 });
 
 // Rota para verificar login de um sistema específico
+// ⚠️ TEMPORARIAMENTE DESABILITADO PARA FOCAR NO GOOGLE SHEETS
 app.post('/api/check-login/:system', async (req, res) => {
     try {
+        // Retornar dados vazios temporariamente
+        return res.json({
+            success: false,
+            message: 'Processo temporariamente desabilitado - focando no Google Sheets',
+            system: req.params.system,
+            data: null,
+            cached: false
+        });
+        
+        /* CÓDIGO ORIGINAL COMENTADO TEMPORARIAMENTE
         const { system } = req.params;
         const creds = CREDENTIALS[system];
         
@@ -2816,6 +2893,7 @@ app.post('/api/check-login/:system', async (req, res) => {
                 message: `As credenciais para ${system} não estão configuradas. Configure as variáveis de ambiente ${system.toUpperCase().replace('-', '_')}_USERNAME e ${system.toUpperCase().replace('-', '_')}_PASSWORD no Render.`
             });
         }
+        */
 
         // Verificar cache primeiro (cada sistema tem seu próprio cache)
         const cached = cache.logins.get(system);
