@@ -7,7 +7,7 @@ const isProduction = window.location.hostname !== 'localhost' && window.location
 // Exemplo: Se seu backend no Render é 'https://dbtotal-backend.onrender.com'
 // Então use: 'https://dbtotal-backend.onrender.com/api'
 // ⚠️ IMPORTANTE: A URL deve terminar com /api
-const RENDER_BACKEND_URL = 'https://sci-worship-tough-philips.trycloudflare.com/api'; // URL do Cloudflare Tunnel (backend local)
+const RENDER_BACKEND_URL = 'https://resorts-winner-paul-appreciate.trycloudflare.com/api'; // URL do Cloudflare Tunnel (backend local)
 
 const API_BASE_URL = isProduction 
     ? (window.API_BASE_URL || RENDER_BACKEND_URL)
@@ -19,6 +19,89 @@ console.log('[CONFIG] API Base URL:', API_BASE_URL);
 console.log('[CONFIG] Hostname:', window.location.hostname);
 
 // Função helper para fazer fetch com headers do ngrok
+// Função auxiliar para escapar HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Função para calcular valores em aberto a partir das situações de cada mês
+function calcularValoresEmAberto(meses) {
+    const valoresEmAberto = {};
+    
+    // Função auxiliar para converter valor para número
+    const converterParaNumero = (valor) => {
+        if (!valor) return 0;
+        let valorStr = String(valor).trim().replace(/R\$\s*/g, '').trim();
+        if (!valorStr || !/\d/.test(valorStr)) return 0;
+        
+        try {
+            let numeroStr = valorStr.replace(/[^\d.,\-\(\)]/g, '');
+            if (numeroStr.includes('(') && numeroStr.includes(')')) {
+                numeroStr = '-' + numeroStr.replace(/[()]/g, '');
+            }
+            numeroStr = numeroStr.replace(/\./g, '').replace(',', '.');
+            return parseFloat(numeroStr) || 0;
+        } catch {
+            return 0;
+        }
+    };
+    
+    // Iterar sobre cada mês
+    Object.keys(meses).forEach(mes => {
+        const mesData = meses[mes];
+        if (!mesData) return;
+        
+        const situacoes = mesData.situacoes || [];
+        const valoresNF = mesData.valores_nf || [];
+        const valoresRecebidos = mesData.valores_recebidos || [];
+        
+        let totalMes = 0;
+        let temValorEmAberto = false;
+        
+        // Processar cada situação
+        situacoes.forEach((itemSituacao, index) => {
+            const situacao = itemSituacao.situacao ? String(itemSituacao.situacao).trim() : '';
+            const situacaoUpper = situacao.toUpperCase();
+            
+            // Verificar se a situação é exatamente "OK" - se for, ignorar completamente
+            if (situacaoUpper === "OK" || situacaoUpper === "PAGO" || situacaoUpper === "CONCLUÍDO") {
+                return; // Pular esta situação, não tem valor em aberto
+            }
+            
+            // Se a situação não está vazia e não é "OK", pode ter valor em aberto
+            // IMPORTANTE: Só considerar se a situação contém explicitamente um valor monetário
+            if (situacao && situacaoUpper !== "") {
+                // Tentar extrair valor monetário diretamente da situação
+                // Padrão para valores monetários: R$ 123.456,78 ou 123.456,78
+                const padraoMonetario = /R\$\s*([\d.,]+)|([\d]{1,3}(?:\.[\d]{3})*(?:,[\d]{2})?)/;
+                const match = situacao.match(padraoMonetario);
+                
+                if (match) {
+                    // Encontrou valor monetário na situação - este é o valor em aberto
+                    const valorEmAberto = match[0];
+                    const valorNum = converterParaNumero(valorEmAberto);
+                    if (valorNum > 0) {
+                        totalMes += valorNum;
+                        temValorEmAberto = true;
+                    }
+                }
+                // NÃO calcular pela diferença entre NF e Recebido
+                // Se a situação não tem valor monetário explícito, não considerar como valor em aberto
+            }
+        });
+        
+        // Apenas armazenar se realmente tem valor em aberto
+        if (temValorEmAberto && totalMes > 0) {
+            valoresEmAberto[mes] = totalMes;
+        }
+    });
+    
+    return valoresEmAberto;
+}
+
 async function fetchWithNgrokHeaders(url, options = {}) {
     const defaultHeaders = {
         'Content-Type': 'application/json',
@@ -108,7 +191,11 @@ async function fetchFinanceiroVivaSaude() {
         const data = await response.json();
         console.log('[FETCH] Dados recebidos:', data);
 
-        if (data.success) {
+        // Processar dados mesmo se success=false, desde que haja contratos com dados
+        const temContratos = data.contratos && Object.keys(data.contratos).length > 0;
+        const temDados = temContratos || (data.valores && (data.valores.meses || data.valores.periodos));
+        
+        if (temDados) {
             // Atualizar elementos financeiros
             const totalEl = document.getElementById('viva-saude-financeiro-total');
             const updateEl = document.getElementById('viva-saude-financeiro-update');
@@ -116,21 +203,32 @@ async function fetchFinanceiroVivaSaude() {
             
             // Verificar se temos dados de múltiplos contratos (nova estrutura)
             if (data.contratos) {
-                console.log('[FRONTEND] Dados de contratos recebidos:', Object.keys(data.contratos));
+                console.log('[FRONTEND] ✅ Dados de contratos recebidos:', Object.keys(data.contratos));
                 // Log detalhado de cada contrato
                 for (const [contrato, dadosContrato] of Object.entries(data.contratos)) {
                     const meses = dadosContrato.valores?.meses ? Object.keys(dadosContrato.valores.meses) : [];
+                    const periodos = dadosContrato.valores?.periodos ? Object.keys(dadosContrato.valores.periodos) : [];
                     const valorAberto = dadosContrato.valores?.vivaRioEmAberto || 'N/A';
-                    console.log(`[FRONTEND] Contrato ${contrato}: success=${dadosContrato.success}, meses=${meses.length} (${meses.join(', ')}), valor aberto=${valorAberto}`);
+                    console.log(`[FRONTEND] Contrato ${contrato}: success=${dadosContrato.success}, meses=${meses.length}, períodos=${periodos.length}, valor aberto=${valorAberto}`);
+                    
+                    // Se tem meses/períodos mas success=false, considerar como sucesso para exibição
+                    if (!dadosContrato.success && (meses.length > 0 || periodos.length > 0)) {
+                        console.log(`[FRONTEND] ⚠️ Contrato ${contrato} tem dados mas success=false. Renderizando mesmo assim.`);
+                        dadosContrato.success = true; // Corrigir para renderizar
+                    }
                 }
                 
                 // Armazenar dados de todos os contratos globalmente
                 window.vivaSaudeContratosData = data.contratos;
                 
-                // Calcular total geral de todos os contratos
+                // Calcular total geral de todos os contratos (mesmo com success=false se tiver dados)
                 let totalGeral = 0;
                 for (const [contrato, dadosContrato] of Object.entries(data.contratos)) {
-                    if (dadosContrato.success && dadosContrato.valores && dadosContrato.valores.total) {
+                    // Calcular total mesmo se success=false, desde que tenha valores
+                    const temMeses = dadosContrato.valores?.meses && Object.keys(dadosContrato.valores.meses).length > 0;
+                    const temPeriodos = dadosContrato.valores?.periodos && Object.keys(dadosContrato.valores.periodos).length > 0;
+                    
+                    if ((dadosContrato.success || temMeses || temPeriodos) && dadosContrato.valores && dadosContrato.valores.total) {
                         const valorTotal = parseFloat(dadosContrato.valores.total.replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
                         totalGeral += valorTotal;
                     }
@@ -150,73 +248,150 @@ async function fetchFinanceiroVivaSaude() {
                     updateEl.textContent = new Date().toLocaleString('pt-BR');
                 }
                 
-                // Exibir valor em aberto do UPAS
-                const valoresContainer = document.getElementById('viva-saude-financeiro-valores');
-                if (valoresContainer && data.contratos.UPAS && data.contratos.UPAS.success) {
-                    const valorAberto = data.contratos.UPAS.valores?.vivaRioEmAberto;
-                    console.log('[FRONTEND] Valor em aberto UPAS:', valorAberto);
-                    
-                    // Validar se é um valor válido (não apenas "Encontrado" ou "Não encontrado")
-                    const valorValido = valorAberto && 
-                                       valorAberto !== "Encontrado" && 
-                                       valorAberto !== "Não encontrado" &&
-                                       valorAberto !== "Encontrado (valor não capturado)" &&
-                                       valorAberto !== "" &&
-                                       valorAberto !== null &&
-                                       valorAberto !== undefined;
-                    
-                    if (valorValido) {
-                        const formatarValor = (valor) => {
-                            if (!valor || typeof valor === 'string' && (valor.trim() === '' || valor.trim() === 'R$')) {
-                                return 'R$ 0,00';
-                            }
-                            let valorLimpo = valor.toString().replace(/R\$\s*/g, '').trim();
-                            if (!valorLimpo || valorLimpo === '') {
-                                return 'R$ 0,00';
-                            }
-                            try {
-                                let numero = valorLimpo.replace(/\./g, '').replace(',', '.');
-                                numero = parseFloat(numero);
-                                if (isNaN(numero)) {
-                                    return valor;
-                                }
-                                return new Intl.NumberFormat('pt-BR', {
-                                    style: 'currency',
-                                    currency: 'BRL'
-                                }).format(numero);
-                            } catch (e) {
-                                return valor;
-                            }
-                        };
-                        
-                        valoresContainer.innerHTML = `
-                            <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px; border-left: 4px solid #f59e0b;">
-                                <h3 style="font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 10px;">Resumo dos Meses em Aberto - UPAS</h3>
-                                <div style="display: flex; align-items: center; gap: 10px;">
-                                    <span style="color: rgba(255,255,255,0.7);">Valor em Aberto:</span>
-                                    <span style="color: #f59e0b; font-weight: 700; font-size: 18px;">${formatarValor(valorAberto)}</span>
-                                </div>
-                            </div>
-                        `;
-                    }
-                }
                 
-                // Renderizar dados do contrato UPAS por padrão (se disponível)
-                if (data.contratos.UPAS && data.contratos.UPAS.success) {
-                    renderizarDadosContrato('UPAS', data.contratos.UPAS.valores);
-                    
-                    // Também atualizar seção antiga para compatibilidade
-                    const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
-                    const financeiroUPASContent = document.getElementById('financeiro-UPAS-content');
-                    if (financeiroUPASContent && financeiroUPASContent.innerHTML) {
-                        if (detalhesMesesContainer) {
-                            detalhesMesesContainer.innerHTML = financeiroUPASContent.innerHTML;
+                // Renderizar todos os contratos que têm dados (não apenas UPAS)
+                console.log('[FRONTEND] 📋 Processando todos os contratos para renderização...');
+                
+                for (const [contrato, dadosContrato] of Object.entries(data.contratos)) {
+                    // Log específico para CRATEUS
+                    const isCrateus = contrato.toUpperCase().includes('CRATE');
+                    if (isCrateus) {
+                        console.log(`\n[FRONTEND] 🎯 FOCANDO EM CRATEUS:`);
+                        console.log(`[FRONTEND] Nome do contrato: "${contrato}"`);
+                        console.log(`[FRONTEND] Dados completos:`, JSON.stringify(dadosContrato, null, 2));
+                        // Verificar se os dados pertencem realmente a CRATEUS (não são de UPAS)
+                        const mesesKeys = dadosContrato.valores?.meses ? Object.keys(dadosContrato.valores.meses) : [];
+                        const primeiroMes = mesesKeys.length > 0 ? dadosContrato.valores.meses[mesesKeys[0]] : null;
+                        if (primeiroMes && primeiroMes.upas) {
+                            const upasEncontradas = primeiroMes.upas.map(u => u.trim().toUpperCase());
+                            console.log(`[FRONTEND] 🔍 CRATEUS - UPAs encontradas no primeiro mês:`, upasEncontradas);
+                            // UPAS do contrato UPAS: BOM JARDIM, VILA VELHA, CRISTO REDENTOR
+                            const upasUPAS = ['BOM JARDIM', 'VILA VELHA', 'CRISTO REDENTOR'];
+                            const temUPAsErradas = upasEncontradas.some(upa => upasUPAS.includes(upa));
+                            if (temUPAsErradas) {
+                                console.error(`[FRONTEND] ❌❌❌ CRATEUS ESTÁ RECEBENDO DADOS DE UPAS! ❌❌❌`);
+                                console.error(`[FRONTEND] UPAs encontradas:`, upasEncontradas);
+                                console.error(`[FRONTEND] UPAs de UPAS:`, upasUPAS);
+                                // Não renderizar se os dados são claramente de UPAS
+                                console.warn(`[FRONTEND] ⚠️ Pulando renderização de CRATEUS porque os dados parecem ser de UPAS`);
+                                continue; // Pular este contrato e tentar novamente depois
+                            }
                         }
                     }
+                    
+                    const temMeses = dadosContrato.valores?.meses && Object.keys(dadosContrato.valores.meses).length > 0;
+                    const temPeriodos = dadosContrato.valores?.periodos && Object.keys(dadosContrato.valores.periodos).length > 0;
+                    const temDados = temMeses || temPeriodos;
+                    
+                    console.log(`[FRONTEND] 🔍 Verificando ${contrato}:`, {
+                        success: dadosContrato.success,
+                        temMeses: temMeses,
+                        temPeriodos: temPeriodos,
+                        temDados: temDados,
+                        qtdMeses: dadosContrato.valores?.meses ? Object.keys(dadosContrato.valores.meses).length : 0,
+                        qtdPeriodos: dadosContrato.valores?.periodos ? Object.keys(dadosContrato.valores.periodos).length : 0,
+                        temValores: !!dadosContrato.valores,
+                        temTotal: !!dadosContrato.valores?.total,
+                        temVivaRio: !!dadosContrato.valores?.vivaRioEmAberto
+                    });
+                    
+                    if (temDados) {
+                        console.log(`[FRONTEND] ✅ Renderizando ${contrato}: ${Object.keys(dadosContrato.valores.meses || {}).length} meses, ${Object.keys(dadosContrato.valores.periodos || {}).length} períodos`);
+                        
+                        // Garantir que o container existe antes de renderizar
+                        const financeiroContratosContainer = document.getElementById('viva-saude-financeiro-contratos');
+                        if (!financeiroContratosContainer) {
+                            console.error(`[FRONTEND] ❌ Container 'viva-saude-financeiro-contratos' não encontrado!`);
+                        } else {
+                            // Criar seção se não existir
+                            let section = document.getElementById(`financeiro-${contrato}`);
+                            
+                            if (!section) {
+                                console.log(`[FRONTEND] 📝 Criando seção para ${contrato}...`);
+                                if (isCrateus) {
+                                    console.log(`[FRONTEND] 🎯 CRATEUS: Criando seção específica...`);
+                                }
+                                
+                                section = document.createElement('div');
+                                section.id = `financeiro-${contrato}`;
+                                section.className = 'financeiro-contrato-section';
+                                section.style.display = 'none'; // Ocultar por padrão
+                                section.setAttribute('data-contrato-nome', contrato); // Atributo para busca alternativa
+                                section.innerHTML = `
+                                    <h4 style="font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        Financeiro - ${contrato}
+                                    </h4>
+                                    <div id="financeiro-${contrato}-content">
+                                        <p style="color: rgba(255,255,255,0.7);">Carregando dados...</p>
+                                    </div>
+                                `;
+                                financeiroContratosContainer.appendChild(section);
+                                console.log(`[FRONTEND] ✅ Seção criada para ${contrato} (ID: financeiro-${contrato})`);
+                                
+                                // Log específico para CRATEUS
+                                if (isCrateus) {
+                                    console.log(`[FRONTEND] 🎯 CRATEUS: Seção criada com sucesso!`);
+                                    console.log(`[FRONTEND] ID do elemento:`, section.id);
+                                    console.log(`[FRONTEND] Elemento existe no DOM:`, document.getElementById(`financeiro-${contrato}`) !== null);
+                                    console.log(`[FRONTEND] Container content existe:`, document.getElementById(`financeiro-${contrato}-content`) !== null);
+                                }
+                            }
+                            
+                            // Renderizar dados - garantir que estamos usando os dados corretos do contrato
+                            // Validação adicional para CRATEUS
+                            if (isCrateus) {
+                                console.log(`[FRONTEND] 🎯 CRATEUS: Validando dados antes de renderizar...`);
+                                const valoresParaRenderizar = dadosContrato.valores;
+                                // Verificar novamente se não são dados de UPAS
+                                const mesesKeys = valoresParaRenderizar?.meses ? Object.keys(valoresParaRenderizar.meses) : [];
+                                if (mesesKeys.length > 0) {
+                                    const primeiroMes = valoresParaRenderizar.meses[mesesKeys[0]];
+                                    if (primeiroMes && primeiroMes.upas) {
+                                        const upasEncontradas = primeiroMes.upas.map(u => u.trim().toUpperCase()).filter(u => u);
+                                        const upasUPAS = ['BOM JARDIM', 'VILA VELHA', 'CRISTO REDENTOR'];
+                                        const temUPAsErradas = upasEncontradas.some(upa => upasUPAS.includes(upa));
+                                        if (temUPAsErradas && upasEncontradas.length === upasUPAS.length) {
+                                            console.error(`[FRONTEND] ❌ CRATEUS: Dados são claramente de UPAS! Não renderizando.`);
+                                            const contentContainer = document.getElementById(`financeiro-${contrato}-content`);
+                                            if (contentContainer) {
+                                                contentContainer.innerHTML = `<p style="color: rgba(255,255,255,0.5);">Erro: Dados do contrato CRATEUS não encontrados. Verifique os logs do backend.</p>`;
+                                            }
+                                            continue;
+                                        }
+                                    }
+                                }
+                                console.log(`[FRONTEND] ✅ CRATEUS: Dados validados, renderizando...`);
+                            }
+                            
+                            // Renderizar dados - a função renderizarDadosContrato já cuida de tornar CRATEUS visível
+                            renderizarDadosContrato(contrato, dadosContrato.valores);
+                            
+                            // Se for UPAS, também atualizar seção antiga para compatibilidade
+                            if (contrato === 'UPAS') {
+                                const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
+                                const financeiroUPASContent = document.getElementById('financeiro-UPAS-content');
+                                if (financeiroUPASContent && financeiroUPASContent.innerHTML) {
+                                    if (detalhesMesesContainer) {
+                                        detalhesMesesContainer.innerHTML = financeiroUPASContent.innerHTML;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        console.warn(`[FRONTEND] ⚠️ ${contrato} não tem dados para renderizar (success=${dadosContrato.success})`);
+                        console.warn(`[FRONTEND] Valores disponíveis:`, {
+                            temMeses: dadosContrato.valores?.meses ? Object.keys(dadosContrato.valores.meses).length : 0,
+                            temPeriodos: dadosContrato.valores?.periodos ? Object.keys(dadosContrato.valores.periodos).length : 0,
+                            valores: dadosContrato.valores
+                        });
+                    }
                 }
+            } else {
+                console.warn('[FRONTEND] ⚠️ Nenhum dado de contratos encontrado na resposta');
+                console.warn('[FRONTEND] Estrutura da resposta:', Object.keys(data));
             }
             // Compatibilidade com estrutura antiga (apenas UPAS)
-            else if (data.valores && data.valores.meses) {
+            if (!data.contratos && data.valores && data.valores.meses) {
                 // Atualizar seção do contrato UPAS se estiver visível
                 const financeiroUPASContent = document.getElementById('financeiro-UPAS-content');
                 const detalhesMesesContainer = document.getElementById('viva-saude-financeiro-detalhes-meses');
@@ -291,10 +466,10 @@ async function fetchFinanceiroVivaSaude() {
                         
                         if (maxLinhas > 0) {
                             htmlDetalhes += `
-                                <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
-                                    <div style="font-size: 20px; font-weight: 700; color: #3b82f6; margin-bottom: 20px; text-transform: capitalize;">
-                                        ${mesNome.charAt(0) + mesNome.slice(1).toLowerCase()}
-                                    </div>
+                <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
+                    <div style="font-size: 20px; font-weight: 700; color: #3b82f6; margin-bottom: 20px; ${usarPeriodos ? '' : 'text-transform: capitalize;'}">
+                        ${usarPeriodos ? escapeHtml(itemNome) : (itemNome.charAt(0) + itemNome.slice(1).toLowerCase())}
+                    </div>
                                     
                                     <div class="table-container">
                                         <table>
@@ -737,13 +912,39 @@ async function fetchFinanceiroVivaSaude() {
             
             console.log('[FRONTEND] Dados financeiros atualizados:', data);
         } else {
-            // Atualizar status de erro
-            const statusEl = document.getElementById('viva-saude-financeiro-status');
-            if (statusEl) {
-                statusEl.textContent = 'Erro ao carregar';
-                statusEl.style.color = '#ef4444';
+            console.warn('[FRONTEND] ⚠️ Resposta não tem success=true, mas verificando se há dados mesmo assim...');
+            // Tentar processar mesmo com success=false se houver contratos
+            if (data.contratos && Object.keys(data.contratos).length > 0) {
+                console.log('[FRONTEND] ⚠️ Tem contratos mesmo com success=false. Processando...');
+                // Processar dados mesmo com success=false
+                window.vivaSaudeContratosData = data.contratos;
+                
+                // Renderizar UPAS se disponível
+                const upasTemDados = data.contratos.UPAS && (
+                    (data.contratos.UPAS.valores?.meses && Object.keys(data.contratos.UPAS.valores.meses).length > 0) ||
+                    (data.contratos.UPAS.valores?.periodos && Object.keys(data.contratos.UPAS.valores.periodos).length > 0)
+                );
+                
+                if (upasTemDados) {
+                    console.log('[FRONTEND] ⚠️ Renderizando UPAS mesmo com success=false...');
+                    renderizarDadosContrato('UPAS', data.contratos.UPAS.valores);
+                    
+                    // Atualizar status
+                    const statusEl = document.getElementById('viva-saude-financeiro-status');
+                    if (statusEl) {
+                        statusEl.textContent = 'Dados carregados (com avisos)';
+                        statusEl.style.color = '#f59e0b';
+                    }
+                }
+            } else {
+                // Atualizar status de erro
+                const statusEl = document.getElementById('viva-saude-financeiro-status');
+                if (statusEl) {
+                    statusEl.textContent = data.error || 'Erro ao carregar';
+                    statusEl.style.color = '#ef4444';
+                }
+                console.error('[FRONTEND] ❌ Erro ao buscar dados financeiros:', data.error);
             }
-            console.error('[FRONTEND] Erro ao buscar dados financeiros:', data.error);
         }
     } catch (error) {
         console.error('[FRONTEND] Erro ao buscar dados financeiros:', error);
@@ -801,10 +1002,12 @@ function initializeContratosVivaSaude() {
         let section = document.getElementById(`financeiro-${contrato}`);
         
         if (!section) {
+            console.log(`[CONTRATOS] 📝 Criando seção para ${contrato}...`);
             // Criar seção se não existir
             section = document.createElement('div');
             section.id = `financeiro-${contrato}`;
             section.className = 'financeiro-contrato-section';
+            section.style.display = 'none'; // Ocultar por padrão
             section.innerHTML = `
                 <h4 style="font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
                     Financeiro - ${contrato}
@@ -814,13 +1017,25 @@ function initializeContratosVivaSaude() {
                 </div>
             `;
             financeiroContratosContainer.appendChild(section);
+            console.log(`[CONTRATOS] ✅ Seção criada para ${contrato}`);
         }
         
         // Toggle visibility
+        const isActive = section.classList.contains('active');
         section.classList.toggle('active');
+        
+        // Mostrar/ocultar seção
+        if (section.classList.contains('active')) {
+            section.style.display = 'block';
+            console.log(`[CONTRATOS] 👁️ Mostrando seção de ${contrato}`);
+        } else {
+            section.style.display = 'none';
+            console.log(`[CONTRATOS] 🙈 Ocultando seção de ${contrato}`);
+        }
         
         // Se estiver sendo mostrado, carregar dados do contrato
         if (section.classList.contains('active')) {
+            console.log(`[CONTRATOS] 📥 Carregando dados de ${contrato}...`);
             loadFinanceiroContrato(contrato);
         }
     }
@@ -837,41 +1052,317 @@ function initializeContratosVivaSaude() {
 
 // Função auxiliar para renderizar dados de um contrato específico
 function renderizarDadosContrato(contrato, valores) {
-    if (!valores || !valores.meses) {
-        console.warn(`[CONTRATOS] Não há dados de meses para o contrato ${contrato}`);
+    // Log específico para CRATEUS
+    const isCrateus = contrato && (contrato.toUpperCase().includes('CRATE') || contrato.toUpperCase().includes('CRAT'));
+    if (isCrateus) {
+        console.log(`\n${'='.repeat(80)}`);
+        console.log(`[CONTRATOS] 🎯🎯🎯 FOCANDO EM CRATEUS 🎯🎯🎯`);
+        console.log(`${'='.repeat(80)}`);
+        console.log(`[CONTRATOS] Nome do contrato recebido: "${contrato}"`);
+        console.log(`[CONTRATOS] Tipo do nome: ${typeof contrato}`);
+        console.log(`[CONTRATOS] Valores recebidos (completo):`, JSON.stringify(valores, null, 2));
+        
+        // Verificação crítica: garantir que os valores não são de UPAS
+        if (valores && valores.meses) {
+            const mesesKeys = Object.keys(valores.meses);
+            if (mesesKeys.length > 0) {
+                const primeiroMes = valores.meses[mesesKeys[0]];
+                if (primeiroMes && primeiroMes.upas) {
+                    const upasEncontradas = primeiroMes.upas.map(u => u ? u.trim().toUpperCase() : '').filter(u => u);
+                    const upasUPAS = ['BOM JARDIM', 'VILA VELHA', 'CRISTO REDENTOR'];
+                    // Verificar se TODAS as UPAs encontradas são de UPAS (indica que são dados errados)
+                    const todasUPAs = upasEncontradas.length >= 2 && upasEncontradas.every(upa => upasUPAS.includes(upa));
+                    if (todasUPAs) {
+                        console.error(`[CONTRATOS] ❌❌❌ CRATEUS: DETECTADOS DADOS DE UPAS! ❌❌❌`);
+                        console.error(`[CONTRATOS] UPAs encontradas:`, upasEncontradas);
+                        console.error(`[CONTRATOS] Estes são claramente UPAs do contrato UPAS, não CRATEUS!`);
+                        console.error(`[CONTRATOS] NÃO RENDERIZANDO ESTES DADOS PARA CRATEUS`);
+                        const contentContainer = document.getElementById(`financeiro-${contrato}-content`);
+                        if (contentContainer) {
+                            contentContainer.innerHTML = `<p style="color: rgba(255,255,255,0.5);">Erro: Dados do contrato CRATEUS não foram encontrados na planilha. Os dados retornados parecem ser do contrato UPAS.</p><p style="color: rgba(255,255,255,0.3); font-size: 12px;">Por favor, verifique se a aba "CRATEUS" existe na planilha do Google Sheets e contém dados corretos.</p>`;
+                        }
+                        return; // Parar aqui, não renderizar dados errados
+                    }
+                }
+            }
+        }
+        
+        console.log(`${'='.repeat(80)}\n`);
+    }
+    
+    if (!valores) {
+        console.warn(`[CONTRATOS] ❌ Não há valores para o contrato ${contrato}`);
+        if (isCrateus) {
+            console.error(`[CONTRATOS] ❌ CRATEUS: valores está vazio, null ou undefined!`);
+        }
         return;
     }
     
-    const contentContainer = document.getElementById(`financeiro-${contrato}-content`);
-    if (!contentContainer) {
-        console.warn(`[CONTRATOS] Container não encontrado para ${contrato}`);
-        return;
-    }
+    // ITAPIPOCA usa períodos, outros usam meses (CRATEUS usa meses)
+    const temPeriodos = valores.periodos && typeof valores.periodos === 'object' && valores.periodos !== null && Object.keys(valores.periodos).length > 0;
+    const temMeses = valores.meses && typeof valores.meses === 'object' && valores.meses !== null && Object.keys(valores.meses).length > 0;
     
-    const ordemMeses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 
-                       'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
-    const mesesOrdenados = Object.keys(valores.meses).sort((a, b) => {
-        return ordemMeses.indexOf(a) - ordemMeses.indexOf(b);
+    console.log(`[CONTRATOS] 🔍 Verificando ${contrato}:`, {
+        temPeriodos: temPeriodos,
+        temMeses: temMeses,
+        temPeriodosObj: !!valores.periodos,
+        temMesesObj: !!valores.meses,
+        periodosType: typeof valores.periodos,
+        mesesType: typeof valores.meses,
+        periodosIsNull: valores.periodos === null,
+        mesesIsNull: valores.meses === null,
+        qtdPeriodos: valores.periodos && typeof valores.periodos === 'object' ? Object.keys(valores.periodos).length : 0,
+        qtdMeses: valores.meses && typeof valores.meses === 'object' ? Object.keys(valores.meses).length : 0,
+        periodosKeys: valores.periodos && typeof valores.periodos === 'object' ? Object.keys(valores.periodos).slice(0, 5) : [],
+        mesesKeys: valores.meses && typeof valores.meses === 'object' ? Object.keys(valores.meses).slice(0, 5) : []
     });
     
-    let htmlDetalhes = '<div style="margin-bottom: 30px;">';
-    htmlDetalhes += `<h3 style="font-size: 18px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 20px; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 10px;">Detalhes por Mês - ${contrato}</h3>`;
+    if (isCrateus) {
+        console.log(`[CONTRATOS] 🎯 CRATEUS - Detalhes:`, {
+            temMeses: temMeses,
+            qtdMeses: valores.meses ? Object.keys(valores.meses).length : 0,
+            mesesEncontrados: valores.meses ? Object.keys(valores.meses) : [],
+            temPeriodos: temPeriodos,
+            temTotal: !!valores.total,
+            temVivaRio: !!valores.vivaRioEmAberto,
+            estruturaMeses: valores.meses
+        });
+    }
     
-    mesesOrdenados.forEach(mesNome => {
-        const mesData = valores.meses[mesNome];
+    // Para ITAPIPOCA, sempre verificar períodos primeiro (mesmo se vazio, tentar usar)
+    const usarPeriodos = (contrato === 'ITAPIPOCA' && valores.periodos && typeof valores.periodos === 'object');
+    
+    // Se for ITAPIPOCA, usar períodos se existir (mesmo que vazio), senão usar meses
+    let itensParaRenderizar;
+    if (contrato === 'ITAPIPOCA') {
+        if (valores.periodos && typeof valores.periodos === 'object' && Object.keys(valores.periodos).length > 0) {
+            itensParaRenderizar = valores.periodos;
+            console.log(`[CONTRATOS] ✅ ITAPIPOCA: Usando períodos (${Object.keys(valores.periodos).length} períodos encontrados)`);
+        } else if (valores.meses && typeof valores.meses === 'object' && Object.keys(valores.meses).length > 0) {
+            itensParaRenderizar = valores.meses;
+            console.log(`[CONTRATOS] ⚠️ ITAPIPOCA: Períodos não encontrados, usando meses como fallback (${Object.keys(valores.meses).length} meses)`);
+        } else {
+            itensParaRenderizar = null;
+            console.warn(`[CONTRATOS] ❌ ITAPIPOCA: Nem períodos nem meses encontrados`);
+        }
+    } else {
+        // Para outros contratos (incluindo CRATEUS), usar meses
+        if (temMeses) {
+            itensParaRenderizar = valores.meses;
+            if (isCrateus) {
+                console.log(`[CONTRATOS] ✅ CRATEUS: Usando meses (${Object.keys(valores.meses).length} meses encontrados)`);
+            }
+        } else {
+            itensParaRenderizar = null;
+            if (isCrateus) {
+                console.error(`[CONTRATOS] ❌ CRATEUS: Não tem meses! valores.meses =`, valores.meses);
+            }
+        }
+    }
+    
+    if (!itensParaRenderizar || (typeof itensParaRenderizar === 'object' && Object.keys(itensParaRenderizar).length === 0)) {
+        console.warn(`[CONTRATOS] ❌ Não há ${usarPeriodos ? 'períodos' : 'meses'} para o contrato ${contrato}`);
+        if (isCrateus) {
+            console.error(`[CONTRATOS] ❌❌❌ CRATEUS NÃO TEM DADOS PARA RENDERIZAR ❌❌❌`);
+            console.error(`[CONTRATOS] Estrutura completa de valores:`, JSON.stringify(valores, null, 2));
+        } else {
+            console.warn(`[CONTRATOS] Estrutura completa de valores:`, JSON.stringify(valores, null, 2));
+        }
+        const contentContainer = document.getElementById(`financeiro-${contrato}-content`);
+        if (contentContainer) {
+            contentContainer.innerHTML = `<p style="color: rgba(255,255,255,0.5);">Nenhum dado disponível para ${contrato}.</p><p style="color: rgba(255,255,255,0.3); font-size: 12px;">Verifique os logs do console para mais detalhes.</p>`;
+        } else {
+            console.error(`[CONTRATOS] ❌ Container 'financeiro-${contrato}-content' não existe no DOM!`);
+        }
+        return;
+    }
+    
+    console.log(`[CONTRATOS] ✅ Renderizando ${contrato} com ${Object.keys(itensParaRenderizar).length} ${usarPeriodos ? 'períodos' : 'meses'}`);
+    if (isCrateus) {
+        console.log(`[CONTRATOS] 🎯 CRATEUS: Iniciando renderização com ${Object.keys(itensParaRenderizar).length} meses`);
+    }
+    
+    // Procurar container - tentar múltiplas estratégias para lidar com caracteres especiais
+    let contentContainer = document.getElementById(`financeiro-${contrato}-content`);
+    
+    // Se não encontrou, tentar encontrar pela seção pai primeiro
+    if (!contentContainer) {
+        const section = document.getElementById(`financeiro-${contrato}`);
+        if (section) {
+            contentContainer = section.querySelector(`[id*="${contrato}-content"]`) || 
+                              section.querySelector(`#financeiro-${contrato}-content`);
+            if (contentContainer && isCrateus) {
+                console.log(`[CONTRATOS] ✅ CRATEUS: Container encontrado via seção pai!`);
+            }
+        }
+    }
+    
+    // Se ainda não encontrou, tentar variações do nome (para lidar com encoding)
+    if (!contentContainer) {
+        console.warn(`[CONTRATOS] ⚠️ Container 'financeiro-${contrato}-content' não encontrado, tentando variações...`);
+        // Tentar encontrar por parte do ID
+        const allContainers = document.querySelectorAll('[id*="financeiro"]');
+        const idsEncontrados = Array.from(allContainers).map(el => el.id);
+        console.log(`[CONTRATOS] Containers encontrados no DOM:`, idsEncontrados);
         
-        // Filtrar valores válidos (mesmo código usado anteriormente)
-        const valoresValidos = (mesData.valores_recebidos || []).filter(item => {
+        // Tentar encontrar usando data-attribute
+        const sectionByAttr = document.querySelector(`[data-contrato-nome="${contrato}"]`);
+        if (sectionByAttr) {
+            contentContainer = sectionByAttr.querySelector('[id*="content"]');
+            if (contentContainer && isCrateus) {
+                console.log(`[CONTRATOS] ✅ CRATEUS: Container encontrado via data-attribute!`);
+            }
+        }
+        
+        // Tentar criar se não existir
+        if (!contentContainer) {
+            const financeiroContratosContainer = document.getElementById('viva-saude-financeiro-contratos');
+            if (financeiroContratosContainer) {
+                console.log(`[CONTRATOS] 📝 Criando container para ${contrato}...`);
+                let section = document.getElementById(`financeiro-${contrato}`);
+                if (!section) {
+                    section = document.createElement('div');
+                    section.id = `financeiro-${contrato}`;
+                    section.className = 'financeiro-contrato-section';
+                    section.style.display = 'none';
+                    section.setAttribute('data-contrato-nome', contrato);
+                    section.innerHTML = `
+                        <h4 style="font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                            Financeiro - ${contrato}
+                        </h4>
+                        <div id="financeiro-${contrato}-content">
+                            <p style="color: rgba(255,255,255,0.7);">Carregando dados...</p>
+                        </div>
+                    `;
+                    financeiroContratosContainer.appendChild(section);
+                    console.log(`[CONTRATOS] ✅ Seção criada para ${contrato}`);
+                }
+                contentContainer = document.getElementById(`financeiro-${contrato}-content`);
+            }
+        }
+    }
+    
+    if (!contentContainer) {
+        console.error(`[CONTRATOS] ❌ Container não encontrado para ${contrato}`);
+        if (isCrateus) {
+            console.error(`[CONTRATOS] ❌❌❌ CRATEUS: Container 'financeiro-${contrato}-content' não existe!`);
+            console.error(`[CONTRATOS] Verifique se o ID está correto no HTML`);
+            console.error(`[CONTRATOS] Tentando buscar todos os elementos financeiro-*...`);
+            const todosFinanceiro = document.querySelectorAll('[id^="financeiro-"]');
+            console.error(`[CONTRATOS] Elementos encontrados:`, Array.from(todosFinanceiro).map(el => ({ id: el.id, tag: el.tagName })));
+        }
+        return;
+    }
+    
+    if (isCrateus) {
+        console.log(`[CONTRATOS] ✅ CRATEUS: Container encontrado! ID: ${contentContainer.id}`);
+    }
+    
+    console.log(`[CONTRATOS] Renderizando ${contrato}: ${Object.keys(itensParaRenderizar).length} ${usarPeriodos ? 'períodos' : 'meses'}`);
+    
+    let itensOrdenados;
+    if (usarPeriodos) {
+        // Ordenar períodos por data inicial (primeira data do período)
+        itensOrdenados = Object.keys(itensParaRenderizar).sort((a, b) => {
+            const dataA = a.split(' - ')[0] || a;
+            const dataB = b.split(' - ')[0] || b;
+            try {
+                return new Date(dataA.split('/').reverse().join('-')) - new Date(dataB.split('/').reverse().join('-'));
+            } catch {
+                return a.localeCompare(b);
+            }
+        });
+    } else {
+        // Ordenar meses
+        const ordemMeses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 
+                           'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+        itensOrdenados = Object.keys(itensParaRenderizar).sort((a, b) => {
+            return ordemMeses.indexOf(a) - ordemMeses.indexOf(b);
+        });
+    }
+    
+    const titulo = usarPeriodos ? `Detalhes por Período - ${contrato}` : `Detalhes por Mês - ${contrato}`;
+    let htmlDetalhes = '<div style="margin-bottom: 30px;">';
+    htmlDetalhes += `<h3 style="font-size: 18px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 20px; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 10px;">${titulo}</h3>`;
+    
+    // Se for UPAS, adicionar valores em aberto logo após o título
+    if (contrato === 'UPAS' && valores.meses) {
+        const valoresEmAberto = calcularValoresEmAberto(valores.meses);
+        const mesesComValores = Object.keys(valoresEmAberto).filter(mes => 
+            valoresEmAberto[mes] && valoresEmAberto[mes] > 0
+        );
+        
+        if (mesesComValores.length > 0) {
+            // Função para formatar valores monetários
+            const formatarValor = (numero) => {
+                return new Intl.NumberFormat('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL'
+                }).format(numero);
+            };
+            
+            // Ordenar meses
+            const ordemMeses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 
+                               'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+            const mesesOrdenados = mesesComValores.sort((a, b) => {
+                return ordemMeses.indexOf(a) - ordemMeses.indexOf(b);
+            });
+            
+            // Calcular total geral
+            let totalGeral = 0;
+            mesesOrdenados.forEach(mes => {
+                totalGeral += valoresEmAberto[mes];
+            });
+            
+            // HTML simplificado
+            htmlDetalhes += `
+                <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px; border-left: 4px solid #f59e0b;">
+                    <h4 style="font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 15px;">Valores em Aberto Viva Rio</h4>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+            `;
+            
+            mesesOrdenados.forEach(mes => {
+                const mesNome = mes.charAt(0) + mes.slice(1).toLowerCase();
+                htmlDetalhes += `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 6px;">
+                            <span style="color: rgba(255,255,255,0.9); font-size: 14px; font-weight: 500;">${mesNome}:</span>
+                            <span style="color: #f59e0b; font-weight: 600; font-size: 14px;">${formatarValor(valoresEmAberto[mes])}</span>
+                        </div>
+                `;
+            });
+            
+            // Total
+            htmlDetalhes += `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(245, 158, 11, 0.15); border-radius: 6px; margin-top: 5px; border: 2px solid rgba(245, 158, 11, 0.3);">
+                            <span style="color: rgba(255,255,255,0.9); font-weight: 700; font-size: 16px;">Total:</span>
+                            <span style="color: #f59e0b; font-weight: 700; font-size: 18px;">${formatarValor(totalGeral)}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    itensOrdenados.forEach(itemNome => {
+        const itemData = itensParaRenderizar[itemNome];
+        
+        if (!itemData) {
+            console.warn(`[CONTRATOS] Item ${itemNome} não tem dados`);
+            return;
+        }
+        
+        // Filtrar valores válidos (funciona tanto para meses quanto períodos)
+        const valoresValidos = (itemData.valores_recebidos || []).filter(item => {
             const valor = item.valor ? item.valor.trim().toUpperCase() : '';
             return valor && valor !== '' && valor !== 'VALOR RECEDIDO' && valor !== 'VALOR RECEBIDO';
         });
         
-        const datasValidas = (mesData.datas || []).filter(item => {
+        const datasValidas = (itemData.datas || []).filter(item => {
             const data = item.data ? item.data.trim().toUpperCase() : '';
             return data && data !== '' && data !== 'DATA';
         });
         
-        const situacoesValidas = (mesData.situacoes || []).filter(item => {
+        const situacoesValidas = (itemData.situacoes || []).filter(item => {
             if (!item.situacao) return false;
             const situacao = item.situacao.trim();
             if (!situacao || situacao === '') return false;
@@ -883,11 +1374,11 @@ function renderizarDadosContrato(contrato, valores) {
             return true;
         });
         
-        const upasValidas = (mesData.upas || []).filter(upa => {
+        const upasValidas = (itemData.upas || []).filter(upa => {
             return upa && upa.trim() !== '';
         });
         
-        const valoresNFValidos = (mesData.valores_nf || []).filter(item => {
+        const valoresNFValidos = (itemData.valores_nf || []).filter(item => {
             const valor = item.valor ? item.valor.trim() : '';
             if (!valor || valor === '') return false;
             const valorUpper = valor.toUpperCase().trim();
@@ -987,6 +1478,62 @@ function renderizarDadosContrato(contrato, valores) {
     
     htmlDetalhes += '</div>';
     contentContainer.innerHTML = htmlDetalhes;
+    
+    // Log específico para CRATEUS após renderização
+    if (isCrateus) {
+        console.log(`[CONTRATOS] 🎯 CRATEUS: Renderização concluída!`);
+        console.log(`[CONTRATOS] Tamanho do HTML gerado: ${htmlDetalhes.length} caracteres`);
+        console.log(`[CONTRATOS] Container innerHTML atualizado:`, contentContainer.innerHTML.length > 0);
+        
+        // Verificar se o HTML foi inserido corretamente
+        const hasContent = contentContainer.innerHTML && 
+                          !contentContainer.innerHTML.includes('Carregando dados') &&
+                          contentContainer.innerHTML.includes(titulo);
+        console.log(`[CONTRATOS] CRATEUS tem conteúdo válido:`, hasContent);
+        
+        if (hasContent) {
+            // Garantir que a seção pai esteja visível
+            const section = contentContainer.closest(`#financeiro-${contrato}`);
+            if (section) {
+                console.log(`[CONTRATOS] ✅ CRATEUS: Tornando seção visível...`);
+                section.style.display = 'block';
+                section.classList.add('active');
+                console.log(`[CONTRATOS] CRATEUS: Seção display = ${section.style.display}, classes = ${section.className}`);
+                
+                // Ativar o botão correspondente
+                const btn = document.querySelector(`[data-contrato="${contrato}"]`);
+                if (btn) {
+                    btn.classList.add('active');
+                    console.log(`[CONTRATOS] ✅ CRATEUS: Botão ativado!`);
+                } else {
+                    console.warn(`[CONTRATOS] ⚠️ CRATEUS: Botão não encontrado com data-contrato="${contrato}"`);
+                    // Tentar encontrar por texto
+                    const allBtns = document.querySelectorAll('.contrato-btn');
+                    allBtns.forEach(btn => {
+                        const text = btn.textContent.trim().toUpperCase();
+                        if (text.includes('CRATE')) {
+                            btn.classList.add('active');
+                            console.log(`[CONTRATOS] ✅ CRATEUS: Botão encontrado por texto e ativado!`);
+                        }
+                    });
+                }
+            } else {
+                console.warn(`[CONTRATOS] ⚠️ CRATEUS: Seção pai não encontrada! Procurando...`);
+                // Tentar encontrar a seção de outra forma
+                const allSections = document.querySelectorAll('[id^="financeiro-"]');
+                allSections.forEach(sec => {
+                    if (sec.id.includes('CRATE') || sec.id.includes('CRAT')) {
+                        console.log(`[CONTRATOS] Encontrada seção relacionada: ${sec.id}`);
+                        sec.style.display = 'block';
+                        sec.classList.add('active');
+                        console.log(`[CONTRATOS] ✅ CRATEUS: Seção encontrada e tornada visível!`);
+                    }
+                });
+            }
+        } else {
+            console.warn(`[CONTRATOS] ⚠️ CRATEUS: Conteúdo não é válido, não tornando visível`);
+        }
+    }
 }
 
 // Carregar financeiro de um contrato específico
@@ -1002,23 +1549,29 @@ function loadFinanceiroContrato(contrato) {
         const dadosContrato = window.vivaSaudeContratosData[contrato];
         console.log(`[CONTRATOS] Carregando dados do contrato ${contrato}:`, dadosContrato);
         
-        // Verificar se há meses encontrados (principal dado)
+        // Verificar se há meses ou períodos encontrados (principal dado)
         const mesesEncontrados = dadosContrato.valores?.meses ? Object.keys(dadosContrato.valores.meses).length : 0;
+        const periodosEncontrados = dadosContrato.valores?.periodos ? Object.keys(dadosContrato.valores.periodos).length : 0;
+        const temDados = mesesEncontrados > 0 || periodosEncontrados > 0;
         
-        if (dadosContrato.success && dadosContrato.valores) {
-            const meses = Object.keys(dadosContrato.valores.meses || {});
-            console.log(`[CONTRATOS] Renderizando ${contrato}: ${meses.length} meses encontrados (${meses.join(', ')})`);
-            renderizarDadosContrato(contrato, dadosContrato.valores);
-            return;
-        } else if (mesesEncontrados > 0 && dadosContrato.valores) {
-            // Mesmo se success=False, mas há meses encontrados, renderizar
-            const meses = Object.keys(dadosContrato.valores.meses || {});
-            console.log(`[CONTRATOS] Renderizando ${contrato} mesmo com success=False: ${meses.length} meses encontrados (${meses.join(', ')})`);
+        console.log(`[CONTRATOS] 📊 Análise do contrato ${contrato}:`, {
+            success: dadosContrato.success,
+            meses: mesesEncontrados,
+            periodos: periodosEncontrados,
+            temDados: temDados
+        });
+        
+        if (temDados && dadosContrato.valores) {
+            if (dadosContrato.success) {
+                console.log(`[CONTRATOS] ✅ Renderizando ${contrato}: ${mesesEncontrados} meses, ${periodosEncontrados} períodos`);
+            } else {
+                console.log(`[CONTRATOS] ⚠️ Renderizando ${contrato} mesmo com success=False: ${mesesEncontrados} meses, ${periodosEncontrados} períodos`);
+            }
             renderizarDadosContrato(contrato, dadosContrato.valores);
             return;
         } else {
-            console.warn(`[CONTRATOS] Dados não disponíveis para ${contrato}:`, dadosContrato);
-            contentContainer.innerHTML = `<p style="color: rgba(255,255,255,0.5);">Erro ao carregar dados: ${dadosContrato.error || 'Dados não disponíveis'}</p>`;
+            console.warn(`[CONTRATOS] ❌ Dados não disponíveis para ${contrato}: success=${dadosContrato.success}, meses=${mesesEncontrados}, períodos=${periodosEncontrados}, error=${dadosContrato.error || 'N/A'}`);
+            contentContainer.innerHTML = `<p style="color: rgba(255,255,255,0.5);">Erro ao carregar dados: ${dadosContrato.error || 'Dados não disponíveis (nenhum mês/período encontrado)'}</p>`;
             return;
         }
     }
@@ -1125,8 +1678,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Verificar todos os logins
     checkAllLogins();
     
-    // Buscar dados financeiros do Viva Saúde (Google Sheets - pausado temporariamente)
-    // fetchFinanceiroVivaSaude();
+    // Buscar dados financeiros do Viva Saúde (Google Sheets)
+    fetchFinanceiroVivaSaude();
     
     // Iniciar auto-refresh automático a cada 24 horas
     startAutoRefresh();
@@ -1164,17 +1717,17 @@ async function checkServerHealth() {
 // Event listeners
 function initializeEventListeners() {
     // Botões de refresh individuais (se ainda existirem)
-    // TEMPORÁRIO: Desabilitado para focar apenas no Google Sheets
+    // Event listeners para botões de refresh
     document.querySelectorAll('.refresh-btn-modern').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const site = e.target.closest('.refresh-btn-modern').dataset.site;
             if (site) {
                 checkLogin(site);
                 
-                // Buscar dados financeiros apenas para Viva Saúde (Google Sheets - pausado temporariamente)
-                // if (site === 'viva-saude') {
-                //     fetchFinanceiroVivaSaude();
-                // }
+                // Buscar dados financeiros apenas para Viva Saúde (Google Sheets)
+                if (site === 'viva-saude') {
+                    fetchFinanceiroVivaSaude();
+                }
             }
         });
     });
@@ -1224,17 +1777,55 @@ async function checkLogin(systemKey) {
             method: 'POST'
         });
 
-        if (!response.ok) {
-            console.error(`[LOGIN] Erro na resposta para ${systemKey}:`, response.status, response.statusText);
+        let data;
+        const responseTime = Date.now() - startTime;
+        
+        try {
+            data = await response.json();
+            console.log(`[LOGIN] Resposta para ${systemKey}:`, data);
+        } catch (jsonError) {
+            console.error(`[LOGIN] Erro ao parsear JSON para ${systemKey}:`, jsonError);
             const errorText = await response.text();
-            console.error(`[LOGIN] Resposta de erro:`, errorText);
+            console.error(`[LOGIN] Resposta de erro (texto):`, errorText);
+            
+            // Se não conseguir parsear JSON, tratar como erro
+            updateSiteStatus(systemKey, 'offline', 'Erro na resposta do servidor');
+            updateSiteData(systemKey, {
+                loginStatus: 'Erro na resposta',
+                lastUpdate: new Date().toLocaleString('pt-BR'),
+                responseTime: `${responseTime}ms`,
+                success: false
+            });
+            sistemasStatus[systemKey] = {
+                success: false,
+                lastUpdate: new Date().toLocaleString('pt-BR'),
+                registros: null
+            };
+            updateGeralCard();
+            addLog(`${system.name}: Erro ao processar resposta do servidor`, 'error');
+            return;
         }
 
-        const data = await response.json();
-        console.log(`[LOGIN] Resposta para ${systemKey}:`, data);
-        const responseTime = Date.now() - startTime;
+        if (!response.ok) {
+            console.error(`[LOGIN] Erro na resposta para ${systemKey}:`, response.status, response.statusText);
+            updateSiteStatus(systemKey, 'offline', `Erro HTTP ${response.status}`);
+            updateSiteData(systemKey, {
+                loginStatus: `Erro HTTP ${response.status}`,
+                lastUpdate: new Date().toLocaleString('pt-BR'),
+                responseTime: `${responseTime}ms`,
+                success: false
+            });
+            sistemasStatus[systemKey] = {
+                success: false,
+                lastUpdate: new Date().toLocaleString('pt-BR'),
+                registros: null
+            };
+            updateGeralCard();
+            addLog(`${system.name}: Erro HTTP ${response.status} - ${data.message || response.statusText}`, 'error');
+            return;
+        }
 
-        if (response.ok && data.success) {
+        if (data && data.success) {
             updateSiteStatus(systemKey, 'online', 'Login OK');
             
             // Se houver dados, exibir informações
@@ -1328,12 +1919,14 @@ async function checkLogin(systemKey) {
             logMessage += ` (${responseTime}ms)`;
             addLog(logMessage, 'success');
         } else {
+            // Se response.ok mas data.success é false, ou se data não existe
             const lastUpdateTimestamp = Date.now();
             const lastUpdate = new Date(lastUpdateTimestamp).toLocaleString('pt-BR');
             
-            updateSiteStatus(systemKey, 'offline', 'Login falhou');
+            const errorMessage = data?.message || (data?.success === false ? 'Login falhou' : 'Resposta inválida');
+            updateSiteStatus(systemKey, 'offline', errorMessage);
             updateSiteData(systemKey, {
-                loginStatus: 'Falha no login',
+                loginStatus: errorMessage,
                 lastUpdate: lastUpdate,
                 responseTime: `${responseTime}ms`,
                 success: false
@@ -1348,7 +1941,7 @@ async function checkLogin(systemKey) {
             };
             updateGeralCard();
             
-            addLog(`${system.name}: Falha no login - ${data.message || 'Erro desconhecido'}`, 'error');
+            addLog(`${system.name}: Falha no login - ${errorMessage}`, 'error');
         }
     } catch (error) {
         const responseTime = Date.now() - startTime;
@@ -1437,8 +2030,8 @@ function startAutoRefresh() {
         addLog('Auto-refresh: Atualizando todos os sistemas...', 'info');
         checkAllLogins();
         
-        // Buscar dados financeiros do Viva Saúde (Google Sheets - pausado temporariamente)
-        // fetchFinanceiroVivaSaude();
+        // Buscar dados financeiros do Viva Saúde (Google Sheets)
+        fetchFinanceiroVivaSaude();
     }, AUTO_REFRESH_INTERVAL);
     
     addLog(`Auto-refresh automático ativado (24 horas)`, 'success');
@@ -1489,10 +2082,10 @@ document.querySelectorAll('.nav-item').forEach(item => {
                     financeiroCard.style.display = 'block';
                     
                     // Se for Viva Saúde, buscar dados financeiros quando o card for exibido
-                    // (Google Sheets - pausado temporariamente)
-                    // if (system === 'viva-saude' || system === 'geral') {
-                    //     fetchFinanceiroVivaSaude();
-                    // }
+                    // (Google Sheets)
+                    if (system === 'viva-saude' || system === 'geral') {
+                        fetchFinanceiroVivaSaude();
+                    }
                 }
             }
         }

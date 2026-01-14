@@ -2848,19 +2848,8 @@ app.get('/api/financeiro/viva-saude', async (req, res) => {
 });
 
 // Rota para verificar login de um sistema específico
-// ⚠️ TEMPORARIAMENTE DESABILITADO PARA FOCAR NO GOOGLE SHEETS
 app.post('/api/check-login/:system', async (req, res) => {
     try {
-        // Retornar dados vazios temporariamente
-        return res.json({
-            success: false,
-            message: 'Processo temporariamente desabilitado - focando no Google Sheets',
-            system: req.params.system,
-            data: null,
-            cached: false
-        });
-        
-        /* CÓDIGO ORIGINAL COMENTADO TEMPORARIAMENTE
         const { system } = req.params;
         const creds = CREDENTIALS[system];
         
@@ -2875,7 +2864,6 @@ app.post('/api/check-login/:system', async (req, res) => {
                 message: `As credenciais para ${system} não estão configuradas. Configure as variáveis de ambiente ${system.toUpperCase().replace('-', '_')}_USERNAME e ${system.toUpperCase().replace('-', '_')}_PASSWORD no Render.`
             });
         }
-        */
 
         // Verificar cache primeiro (cada sistema tem seu próprio cache)
         const cached = cache.logins.get(system);
@@ -2915,17 +2903,28 @@ app.post('/api/check-login/:system', async (req, res) => {
         
         let loginResult;
         
-        if (creds.system === 'rhid') {
-            if (system === 'coop-vitta' || system === 'delta') {
-                const systemName = system === 'coop-vitta' ? 'COOP-VITTA' : 'DELTA';
-                loginResult = await loginRHIDAndExportCSV(creds.username, creds.password, systemName);
+        try {
+            if (creds.system === 'rhid') {
+                if (system === 'coop-vitta' || system === 'delta') {
+                    const systemName = system === 'coop-vitta' ? 'COOP-VITTA' : 'DELTA';
+                    console.log(`[API] 🔐 Iniciando login ${systemName}...`);
+                    loginResult = await loginRHIDAndExportCSV(creds.username, creds.password, systemName);
+                    console.log(`[API] ✅ Login ${systemName} concluído:`, loginResult?.success !== false ? 'Sucesso' : 'Falha');
+                } else {
+                    loginResult = await loginRHID(creds.username, creds.password);
+                }
+            } else if (creds.system === 'doctorid') {
+                loginResult = await loginDoctorID(creds.username, creds.password);
             } else {
-                loginResult = await loginRHID(creds.username, creds.password);
+                return res.status(400).json({ 
+                    success: false,
+                    error: 'Sistema não suportado',
+                    message: `Sistema ${system} não é suportado`
+                });
             }
-        } else if (creds.system === 'doctorid') {
-            loginResult = await loginDoctorID(creds.username, creds.password);
-        } else {
-            return res.status(400).json({ error: 'Sistema não suportado' });
+        } catch (loginError) {
+            console.error(`[API] ❌ Erro durante login de ${system}:`, loginError);
+            throw new Error(`Erro durante login: ${loginError.message}`);
         }
 
         const result = {
@@ -2962,12 +2961,14 @@ app.post('/api/check-login/:system', async (req, res) => {
 
         res.json(result);
     } catch (error) {
-        console.error('Erro ao verificar login:', error);
+        const system = req.params.system;
+        console.error(`[API] ❌ Erro ao verificar login de ${system}:`, error);
+        console.error(`[API] Stack trace:`, error.stack);
         
         // Se houver cache, retornar ele mesmo com erro
-        const cached = cache.logins.get(req.params.system);
+        const cached = cache.logins.get(system);
         if (cached) {
-            console.log(`[CACHE] ⚠️ Erro ao buscar dados de ${req.params.system}, retornando cache antigo...`);
+            console.log(`[CACHE] ⚠️ Erro ao buscar dados de ${system}, retornando cache antigo...`);
             return res.json({
                 ...cached.data,
                 cached: true,
@@ -2978,7 +2979,10 @@ app.post('/api/check-login/:system', async (req, res) => {
         
         if (!res.headersSent) {
             res.status(500).json({ 
-                error: error.message,
+                success: false,
+                error: 'Erro ao verificar login',
+                message: error.message || 'Erro desconhecido',
+                system: system,
                 details: process.env.NODE_ENV === 'development' ? error.stack : undefined
             });
         }

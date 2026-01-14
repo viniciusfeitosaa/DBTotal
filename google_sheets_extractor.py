@@ -86,19 +86,20 @@ def setup_driver():
             print(f"Erro ao configurar driver (fallback): {e2}", file=sys.stderr)
             return None
 
-def extract_financial_data(driver, url, contrato_nome=None, usar_periodos=False):
+def extract_financial_data(driver, url, aba_nome=None, contrato_nome=None, usar_periodos=False):
     """Extrair dados financeiros do Google Sheets para um contrato específico
     
     Parâmetros:
     - driver: Selenium WebDriver
     - url: URL da planilha
-    - contrato_nome: Nome do contrato (ex: "UPAS", "ITAPIPOCA")
+    - aba_nome: Nome da aba para buscar na planilha (ex: "RELATÓRIO CYLLA", "CRATEUS")
+    - contrato_nome: Nome do contrato para identificar os dados (ex: "UPAS", "CRATEUS")
     - usar_periodos: Se True, procura por períodos em vez de meses (usado para ITAPIPOCA)
     """
     result = {
         "success": False,
         "message": "",
-        "contrato": contrato_nome or "UPAS",
+        "contrato": contrato_nome if contrato_nome else (aba_nome if aba_nome else "UPAS"),
         "valores": {
             "vivaRioEmAberto": None,
             "setembro": None,
@@ -136,9 +137,10 @@ def extract_financial_data(driver, url, contrato_nome=None, usar_periodos=False)
         time.sleep(2)  # Reduzido de 5s para 2s
         
         # Tentar encontrar a aba do contrato (timeout reduzido)
-        # Se contrato_nome não foi especificado, usar "RELATÓRIO CYLLA" (UPAS) como padrão
-        nome_aba_busca = contrato_nome if contrato_nome else "RELATÓRIO CYLLA"
-        print(f"[GOOGLE SHEETS] Procurando aba '{nome_aba_busca}'...", file=sys.stderr)
+        # Usar aba_nome se fornecido, senão usar contrato_nome, senão usar padrão
+        nome_aba_busca = aba_nome if aba_nome else (contrato_nome if contrato_nome else "RELATÓRIO CYLLA")
+        nome_contrato = contrato_nome if contrato_nome else (aba_nome if aba_nome else "UPAS")
+        print(f"[GOOGLE SHEETS] Procurando aba '{nome_aba_busca}' para contrato '{nome_contrato}'...", file=sys.stderr)
         try:
             # Procurar por abas (sheets tabs)
             aba_encontrada = False
@@ -826,23 +828,117 @@ def process_csv(csv_content, usar_periodos=False):
         # A36: NOVEMBRO | B36: valor
         # A37: Total | B37: valor total
         
-        # Procurar linha 33 (índice 32) - VIVA RIO EM ABERTO ou valores em aberto
-        # Buscar por diferentes padrões de "valor em aberto" para diferentes contratos
+        # BUSCA ESPECÍFICA PARA VALOR EM ABERTO - UPAS (VIVA RIO EM ABERTO)
+        # Primeiro, tentar buscar na linha 33 (índice 32) que é onde geralmente está
+        valor_em_aberto_encontrado = False
         if len(rows) > 32:
             linha_33 = rows[32]  # A33 (índice 32)
             if linha_33 and len(linha_33) > 0:
                 cell_a33 = str(linha_33[0]).strip().upper() if len(linha_33) > 0 else ""
                 # Procurar por diferentes padrões
                 if "VIVA RIO" in cell_a33 or "VIVA RIO EM ABERTO" in cell_a33:
-                    # Se encontrar, capturar o valor na coluna B (índice 1)
-                    valor_em_aberto = str(linha_33[1]).strip() if len(linha_33) > 1 else "Encontrado"
-                    valores["vivaRioEmAberto"] = valor_em_aberto if valor_em_aberto else "Encontrado"
-                    print(f"[GOOGLE SHEETS] ✅ Linha 33 (A33) encontrada: '{linha_33[0]}', valor em aberto: '{valor_em_aberto}'", file=sys.stderr)
+                    # Tentar capturar o valor na coluna B (índice 1) primeiro
+                    valor_em_aberto = None
+                    if len(linha_33) > 1:
+                        valor_em_aberto = str(linha_33[1]).strip()
+                    # Se coluna B está vazia ou não tem valor válido, tentar coluna C (índice 2)
+                    if not valor_em_aberto or valor_em_aberto == "" or valor_em_aberto.upper() in ["VIVA RIO", "VIVA RIO EM ABERTO", "EM ABERTO"]:
+                        if len(linha_33) > 2:
+                            valor_em_aberto = str(linha_33[2]).strip()
+                    # Se ainda não encontrou, verificar próxima linha (linha 34 pode ter o valor)
+                    if not valor_em_aberto or valor_em_aberto == "" or valor_em_aberto.upper() in ["VIVA RIO", "VIVA RIO EM ABERTO", "EM ABERTO"]:
+                        if len(rows) > 33:
+                            linha_34 = rows[33]
+                            if len(linha_34) > 1:
+                                valor_em_aberto = str(linha_34[1]).strip()
+                    
+                    if valor_em_aberto and valor_em_aberto != "" and valor_em_aberto.upper() not in ["VIVA RIO", "VIVA RIO EM ABERTO", "EM ABERTO"]:
+                        valores["vivaRioEmAberto"] = valor_em_aberto
+                        valor_em_aberto_encontrado = True
+                        print(f"[GOOGLE SHEETS] ✅ UPAS - Linha 33 (A33) encontrada: '{linha_33[0]}', valor em aberto capturado: '{valor_em_aberto}'", file=sys.stderr)
+                    else:
+                        print(f"[GOOGLE SHEETS] ⚠️ UPAS - Linha 33 encontrada mas valor não capturado corretamente. Tentando busca genérica...", file=sys.stderr)
                 elif "EM ABERTO" in cell_a33 or "ABERTO" in cell_a33:
                     # Para outros contratos que podem ter apenas "EM ABERTO"
-                    valor_em_aberto = str(linha_33[1]).strip() if len(linha_33) > 1 else "Encontrado"
-                    valores["vivaRioEmAberto"] = valor_em_aberto if valor_em_aberto else "Encontrado"
-                    print(f"[GOOGLE SHEETS] ✅ Valor em aberto encontrado na linha 33: '{valor_em_aberto}'", file=sys.stderr)
+                    valor_em_aberto = str(linha_33[1]).strip() if len(linha_33) > 1 else None
+                    if not valor_em_aberto or valor_em_aberto == "":
+                        valor_em_aberto = str(linha_33[2]).strip() if len(linha_33) > 2 else None
+                    
+                    if valor_em_aberto and valor_em_aberto != "" and valor_em_aberto.upper() not in ["EM ABERTO", "ABERTO"]:
+                        valores["vivaRioEmAberto"] = valor_em_aberto
+                        valor_em_aberto_encontrado = True
+                        print(f"[GOOGLE SHEETS] ✅ Valor em aberto encontrado na linha 33: '{valor_em_aberto}'", file=sys.stderr)
+        
+        # Se não encontrou na linha 33, fazer busca genérica em todas as linhas
+        if not valor_em_aberto_encontrado:
+            # BUSCA GENÉRICA PARA VALOR EM ABERTO (se não encontrou na linha 33)
+            print("[GOOGLE SHEETS] 🔍 Buscando 'VIVA RIO EM ABERTO' em todas as linhas...", file=sys.stderr)
+            padroes_em_aberto = [
+                "VIVA RIO EM ABERTO",  # Prioridade para UPAS
+                "VIVA RIO",
+                "EM ABERTO",
+                "VALOR EM ABERTO",
+                "TOTAL EM ABERTO"
+            ]
+            
+            for i, row in enumerate(rows):
+                if not row or len(row) == 0:
+                    continue
+                    
+                # Verificar célula A primeiro (índice 0)
+                cell_a = str(row[0]).strip().upper() if len(row) > 0 else ""
+                
+                # Verificar cada padrão
+                for padrao in padroes_em_aberto:
+                    if padrao in cell_a:
+                        print(f"[GOOGLE SHEETS] ✅ Padrão '{padrao}' encontrado na linha {i + 1}, célula A: '{row[0] if len(row) > 0 else ''}'", file=sys.stderr)
+                        
+                        # Tentar capturar valor na coluna B (índice 1)
+                        valor_em_aberto = None
+                        if len(row) > 1:
+                            valor_em_aberto = str(row[1]).strip()
+                        
+                        # Validar se é um valor real (não é apenas o texto do padrão)
+                        if valor_em_aberto and valor_em_aberto.upper() not in padroes_em_aberto and valor_em_aberto != "":
+                            # Verificar se parece ser um valor monetário (contém números)
+                            if re.search(r'\d', valor_em_aberto):
+                                valores["vivaRioEmAberto"] = valor_em_aberto
+                                valor_em_aberto_encontrado = True
+                                print(f"[GOOGLE SHEETS] ✅ Valor em aberto capturado da coluna B (linha {i + 1}): '{valor_em_aberto}'", file=sys.stderr)
+                                break
+                        
+                        # Se coluna B não tem valor válido, tentar coluna C (índice 2)
+                        if not valor_em_aberto_encontrado and len(row) > 2:
+                            valor_em_aberto = str(row[2]).strip()
+                            if valor_em_aberto and valor_em_aberto.upper() not in padroes_em_aberto and valor_em_aberto != "":
+                                if re.search(r'\d', valor_em_aberto):
+                                    valores["vivaRioEmAberto"] = valor_em_aberto
+                                    valor_em_aberto_encontrado = True
+                                    print(f"[GOOGLE SHEETS] ✅ Valor em aberto capturado da coluna C (linha {i + 1}): '{valor_em_aberto}'", file=sys.stderr)
+                                    break
+                        
+                        # Se ainda não encontrou, verificar próxima linha (o valor pode estar na linha seguinte)
+                        if not valor_em_aberto_encontrado and i + 1 < len(rows):
+                            linha_seguinte = rows[i + 1]
+                            if len(linha_seguinte) > 1:
+                                valor_seguinte = str(linha_seguinte[1]).strip()
+                                if valor_seguinte and re.search(r'\d', valor_seguinte):
+                                    valores["vivaRioEmAberto"] = valor_seguinte
+                                    valor_em_aberto_encontrado = True
+                                    print(f"[GOOGLE SHEETS] ✅ Valor em aberto capturado da linha seguinte ({i + 2}), coluna B: '{valor_seguinte}'", file=sys.stderr)
+                                    break
+                        
+                        if valor_em_aberto_encontrado:
+                            break
+                
+                if valor_em_aberto_encontrado:
+                    break
+        
+        # Log final sobre valor em aberto
+        if valores["vivaRioEmAberto"]:
+            print(f"[GOOGLE SHEETS] ✅ Valor em aberto final capturado: '{valores['vivaRioEmAberto']}'", file=sys.stderr)
+        else:
+            print("[GOOGLE SHEETS] ⚠️ Valor em aberto não foi encontrado após todas as tentativas", file=sys.stderr)
         
         # Função auxiliar para verificar se valor é negativo
         def is_negative_value(valor_str):
@@ -912,13 +1008,19 @@ def process_csv(csv_content, usar_periodos=False):
                         valores["totalNegativo"] = True
                     print(f"[GOOGLE SHEETS] ✅ Total encontrado na linha 37, coluna B: '{cell_b37}'", file=sys.stderr)
         
-        # Se não encontrou nas linhas específicas, tentar busca genérica
+        # Log final sobre valor em aberto (antes de continuar com busca de meses)
+        if valores["vivaRioEmAberto"]:
+            print(f"[GOOGLE SHEETS] ✅✅✅ VALOR EM ABERTO FINAL CAPTURADO: '{valores['vivaRioEmAberto']}' ✅✅✅", file=sys.stderr)
+        else:
+            print("[GOOGLE SHEETS] ⚠️ Valor em aberto NÃO foi encontrado após todas as tentativas", file=sys.stderr)
+        
+        # Continuar com busca de meses (código antigo para compatibilidade)
+        linha_viva_rio = None
+        indice_viva_rio = -1
+        
+        # Buscar linha VIVA RIO novamente para processar meses (se necessário)
         if not any([valores["setembro"], valores["outubro"], valores["novembro"], valores["total"]]):
-            print("[GOOGLE SHEETS] ⚠️ Não encontrado nas linhas específicas, tentando busca genérica...", file=sys.stderr)
-            linha_viva_rio = None
-            indice_viva_rio = -1
-            
-            # Buscar por diferentes padrões de "valor em aberto" para todos os contratos
+            print("[GOOGLE SHEETS] ⚠️ Não encontrado nas linhas específicas, tentando busca genérica para meses...", file=sys.stderr)
             padroes_em_aberto = [
                 "VIVA RIO EM ABERTO",
                 "VIVA RIO",
@@ -934,13 +1036,6 @@ def process_csv(csv_content, usar_periodos=False):
                     if padrao in row_text:
                         linha_viva_rio = row
                         indice_viva_rio = i
-                        # Capturar o valor na coluna B (índice 1) se existir
-                        valor_em_aberto = str(row[1]).strip() if len(row) > 1 and str(row[1]).strip() else None
-                        if not valor_em_aberto or valor_em_aberto == "":
-                            # Tentar coluna C (índice 2) também
-                            valor_em_aberto = str(row[2]).strip() if len(row) > 2 and str(row[2]).strip() else "Encontrado"
-                        valores["vivaRioEmAberto"] = valor_em_aberto if valor_em_aberto else "Encontrado"
-                        print(f"[GOOGLE SHEETS] ✅ Linha '{padrao}' encontrada na linha {i + 1}, valor: '{valor_em_aberto}'", file=sys.stderr)
                         break
                 if linha_viva_rio:
                     break
@@ -1079,7 +1174,7 @@ def extract_all_contratos(driver, url):
         "UPAS": "RELATÓRIO CYLLA",
         "CPSS": "CPSS",
         "EVOLUIR": "EVOLUIR",
-        "CRATEÚS": "CRATEÚS",
+        "CRATEUS": "CRATEUS",
         "ITAPIPOCA": "ITAPIPOCA"
     }
     
@@ -1093,11 +1188,31 @@ def extract_all_contratos(driver, url):
             if usar_periodos:
                 print(f"[GOOGLE SHEETS] ITAPIPOCA detectado: usando modo de períodos", file=sys.stderr)
             
-            # Passar o nome da aba, não o nome do contrato
-            resultado = extract_financial_data(driver, url, aba_nome, usar_periodos=usar_periodos)
+            # Passar tanto o nome da aba quanto o nome do contrato
+            resultado = extract_financial_data(driver, url, aba_nome=aba_nome, contrato_nome=contrato_nome, usar_periodos=usar_periodos)
             # Garantir que o resultado tenha o nome do contrato correto
             resultado["contrato"] = contrato_nome
             resultados[contrato_nome] = resultado
+            
+            # Validação adicional: verificar se os dados retornados não são de outro contrato (especialmente CRATEUS)
+            if contrato_nome.upper() in ["CRATEUS", "CRATES"] or "CRATE" in contrato_nome.upper():
+                meses = resultado.get("valores", {}).get("meses", {})
+                if meses and len(meses) > 0:
+                    primeiro_mes_key = list(meses.keys())[0]
+                    primeiro_mes = meses[primeiro_mes_key]
+                    upas_encontradas = primeiro_mes.get("upas", []) if primeiro_mes else []
+                    if upas_encontradas:
+                        upas_nomes = [str(u).upper().strip() for u in upas_encontradas if u and str(u).strip()]
+                        # UPAs de UPAS: BOM JARDIM, VILA VELHA, CRISTO REDENTOR
+                        upas_upas = ["BOM JARDIM", "VILA VELHA", "CRISTO REDENTOR"]
+                        # Se todas as UPAs encontradas são de UPAS, indica dados errados
+                        upas_validas = [u for u in upas_nomes if u]
+                        if len(upas_validas) >= 2 and all(upa in upas_upas for upa in upas_validas):
+                            print(f"[GOOGLE SHEETS] ⚠️ CRATEUS: Detectados dados de UPAS! UPAs encontradas: {upas_nomes}", file=sys.stderr)
+                            print(f"[GOOGLE SHEETS] ⚠️ CRATEUS: Marcando como erro - dados incorretos", file=sys.stderr)
+                            resultado["success"] = False
+                            resultado["error"] = f"Dados retornados parecem ser do contrato UPAS (UPAs: {upas_nomes}), não CRATEUS. Verifique se a aba '{aba_nome}' existe na planilha e contém dados corretos."
+                            resultado["valores"] = {"meses": {}, "vivaRioEmAberto": None, "total": None}
             # Sempre verificar se há meses/períodos encontrados, mesmo se success=False
             meses_encontrados = len(resultado.get("valores", {}).get("meses", {}))
             periodos_encontrados = len(resultado.get("valores", {}).get("periodos", {})) if resultado.get("valores", {}).get("periodos") else 0
