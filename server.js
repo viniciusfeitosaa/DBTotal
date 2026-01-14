@@ -73,6 +73,95 @@ if (!fs.existsSync(downloadsDir)) {
 // Armazenar sessões (em produção, use Redis ou similar)
 const sessions = new Map();
 
+// ============================================================================
+// SISTEMA DE FILA PARA PROCESSOS PUPPETEER (Evita múltiplos processos simultâneos)
+// ============================================================================
+const puppeteerQueue = {
+    running: false,
+    queue: [],
+    maxConcurrent: 1, // Apenas 1 processo Puppeteer por vez (crítico para reduzir carga)
+    
+    async add(task) {
+        return new Promise((resolve, reject) => {
+            this.queue.push({ task, resolve, reject });
+            this.process();
+        });
+    },
+    
+    async process() {
+        if (this.running || this.queue.length === 0) {
+            return;
+        }
+        
+        this.running = true;
+        
+        while (this.queue.length > 0) {
+            const { task, resolve, reject } = this.queue.shift();
+            
+            try {
+                console.log(`[PUPPETEER-QUEUE] Processando tarefa (${this.queue.length} na fila)...`);
+                const result = await task();
+                resolve(result);
+            } catch (error) {
+                reject(error);
+            }
+        }
+        
+        this.running = false;
+    }
+};
+
+// ============================================================================
+// RATE LIMITING SIMPLES (Limita requisições por IP)
+// ============================================================================
+const rateLimit = {
+    requests: new Map(),
+    windowMs: 60000, // 1 minuto
+    maxRequests: 30, // Máximo 30 requisições por minuto por IP
+    
+    check(ip) {
+        const now = Date.now();
+        const userRequests = this.requests.get(ip) || [];
+        
+        // Remover requisições antigas (fora da janela de tempo)
+        const recentRequests = userRequests.filter(timestamp => now - timestamp < this.windowMs);
+        
+        if (recentRequests.length >= this.maxRequests) {
+            return false; // Muitas requisições
+        }
+        
+        recentRequests.push(now);
+        this.requests.set(ip, recentRequests);
+        return true; // OK
+    },
+    
+    getClientIP(req) {
+        return req.ip || 
+               req.headers['x-forwarded-for']?.split(',')[0] || 
+               req.connection.remoteAddress || 
+               'unknown';
+    }
+};
+
+// Middleware de rate limiting
+function rateLimitMiddleware(req, res, next) {
+    const ip = rateLimit.getClientIP(req);
+    
+    if (!rateLimit.check(ip)) {
+        console.log(`[RATE-LIMIT] ⚠️ Muitas requisições de ${ip}, bloqueando temporariamente`);
+        return res.status(429).json({
+            error: 'Muitas requisições',
+            message: 'Por favor, aguarde um momento antes de fazer outra requisição.',
+            retryAfter: 60
+        });
+    }
+    
+    next();
+}
+
+// Aplicar rate limiting apenas nas rotas de API (não em arquivos estáticos)
+app.use('/api', rateLimitMiddleware);
+
 // Sistema de Cache para pré-carregar dados no servidor
 const cache = {
     // Cache de logins por sistema (cada sistema tem seu próprio cache)
@@ -303,83 +392,86 @@ if (missingCredentials.length > 0) {
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Função wrapper para lançar Puppeteer com instalação automática do Chrome se necessário
+// Agora usa sistema de fila para evitar múltiplos processos simultâneos
 async function launchPuppeteer(retries = 3) {
-    const puppeteer = require('puppeteer');
-    
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-            const options = getPuppeteerOptions();
-            
-            // No Render, verificar se Chrome está instalado
-            if (process.env.RENDER) {
-                try {
-                    const executablePath = puppeteer.executablePath();
-                    if (!executablePath || !fs.existsSync(executablePath)) {
-                        console.log(`[PUPPETEER] Chrome não encontrado, tentando instalar...`);
-                        const { execSync } = require('child_process');
-                        const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
-                        
-                        try {
-                            execSync('npx puppeteer browsers install chrome', { 
-                                stdio: 'pipe',
-                                env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir },
-                                timeout: 300000 // 5 minutos
-                            });
-                            console.log(`[PUPPETEER] ✅ Chrome instalado com sucesso`);
+    return await puppeteerQueue.add(async () => {
+        const puppeteer = require('puppeteer');
+        
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                const options = getPuppeteerOptions();
+                
+                // No Render, verificar se Chrome está instalado
+                if (process.env.RENDER) {
+                    try {
+                        const executablePath = puppeteer.executablePath();
+                        if (!executablePath || !fs.existsSync(executablePath)) {
+                            console.log(`[PUPPETEER] Chrome não encontrado, tentando instalar...`);
+                            const { execSync } = require('child_process');
+                            const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
                             
-                            // Atualizar caminho após instalação
-                            const newPath = puppeteer.executablePath();
-                            if (newPath && fs.existsSync(newPath)) {
-                                options.executablePath = newPath;
-                                console.log(`[PUPPETEER] Usando Chrome recém-instalado: ${newPath}`);
+                            try {
+                                execSync('npx puppeteer browsers install chrome', { 
+                                    stdio: 'pipe',
+                                    env: { ...process.env, PUPPETEER_CACHE_DIR: cacheDir },
+                                    timeout: 300000 // 5 minutos
+                                });
+                                console.log(`[PUPPETEER] ✅ Chrome instalado com sucesso`);
+                                
+                                // Atualizar caminho após instalação
+                                const newPath = puppeteer.executablePath();
+                                if (newPath && fs.existsSync(newPath)) {
+                                    options.executablePath = newPath;
+                                    console.log(`[PUPPETEER] Usando Chrome recém-instalado: ${newPath}`);
+                                }
+                            } catch (err) {
+                                console.error(`[PUPPETEER] ⚠️ Erro ao instalar Chrome: ${err.message}`);
+                                console.log(`[PUPPETEER] Tentando continuar sem especificar executablePath...`);
                             }
-                        } catch (err) {
-                            console.error(`[PUPPETEER] ⚠️ Erro ao instalar Chrome: ${err.message}`);
-                            console.log(`[PUPPETEER] Tentando continuar sem especificar executablePath...`);
+                        } else {
+                            options.executablePath = executablePath;
+                            console.log(`[PUPPETEER] ✅ Chrome encontrado: ${executablePath}`);
                         }
-                    } else {
-                        options.executablePath = executablePath;
-                        console.log(`[PUPPETEER] ✅ Chrome encontrado: ${executablePath}`);
+                    } catch (err) {
+                        console.warn(`[PUPPETEER] ⚠️ Erro ao verificar Chrome: ${err.message}`);
                     }
-                } catch (err) {
-                    console.warn(`[PUPPETEER] ⚠️ Erro ao verificar Chrome: ${err.message}`);
-                }
-            } else {
-                // Em desenvolvimento local (Windows), verificar se Chrome está disponível
-                try {
-                    const executablePath = puppeteer.executablePath();
-                    if (executablePath && fs.existsSync(executablePath)) {
-                        options.executablePath = executablePath;
-                        console.log(`[PUPPETEER] ✅ Chrome encontrado: ${executablePath}`);
-                    } else {
-                        console.warn(`[PUPPETEER] ⚠️ Chrome não encontrado no caminho padrão, tentando sem especificar...`);
+                } else {
+                    // Em desenvolvimento local (Windows), verificar se Chrome está disponível
+                    try {
+                        const executablePath = puppeteer.executablePath();
+                        if (executablePath && fs.existsSync(executablePath)) {
+                            options.executablePath = executablePath;
+                            console.log(`[PUPPETEER] ✅ Chrome encontrado: ${executablePath}`);
+                        } else {
+                            console.warn(`[PUPPETEER] ⚠️ Chrome não encontrado no caminho padrão, tentando sem especificar...`);
+                        }
+                    } catch (err) {
+                        console.warn(`[PUPPETEER] ⚠️ Erro ao verificar Chrome: ${err.message}`);
                     }
-                } catch (err) {
-                    console.warn(`[PUPPETEER] ⚠️ Erro ao verificar Chrome: ${err.message}`);
                 }
-            }
-            
-            console.log(`[PUPPETEER] Tentativa ${attempt}/${retries} - Iniciando Chrome...`);
-            const browser = await puppeteer.launch(options);
-            
-            // Verificar se o browser está realmente conectado
-            const pages = await browser.pages();
-            console.log(`[PUPPETEER] ✅ Chrome iniciado com sucesso! Páginas: ${pages.length}`);
-            
-            return browser;
-        } catch (error) {
-            console.error(`[PUPPETEER] ❌ Erro na tentativa ${attempt}/${retries}:`, error.message);
-            
-            if (attempt < retries) {
-                const waitTime = attempt * 2000; // Esperar 2s, 4s, 6s...
-                console.log(`[PUPPETEER] Aguardando ${waitTime}ms antes de tentar novamente...`);
-                await delay(waitTime);
-            } else {
-                console.error(`[PUPPETEER] ❌ Falha após ${retries} tentativas`);
-                throw new Error(`Não foi possível iniciar o Chrome após ${retries} tentativas: ${error.message}`);
+                
+                console.log(`[PUPPETEER] Tentativa ${attempt}/${retries} - Iniciando Chrome...`);
+                const browser = await puppeteer.launch(options);
+                
+                // Verificar se o browser está realmente conectado
+                const pages = await browser.pages();
+                console.log(`[PUPPETEER] ✅ Chrome iniciado com sucesso! Páginas: ${pages.length}`);
+                
+                return browser;
+            } catch (error) {
+                console.error(`[PUPPETEER] ❌ Erro na tentativa ${attempt}/${retries}:`, error.message);
+                
+                if (attempt < retries) {
+                    const waitTime = attempt * 2000; // Esperar 2s, 4s, 6s...
+                    console.log(`[PUPPETEER] Aguardando ${waitTime}ms antes de tentar novamente...`);
+                    await delay(waitTime);
+                } else {
+                    console.error(`[PUPPETEER] ❌ Falha após ${retries} tentativas`);
+                    throw new Error(`Não foi possível iniciar o Chrome após ${retries} tentativas: ${error.message}`);
+                }
             }
         }
-    }
+    });
 }
 
 // Helper function para configurar Puppeteer (compatível com Render)
